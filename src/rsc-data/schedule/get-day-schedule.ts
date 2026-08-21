@@ -1,0 +1,108 @@
+import "server-only";
+import { createClient } from "@/supabase-clients/server";
+import type { DayTimelineData, DayTimelineSlot } from "@/types/schedule";
+import type { AppointmentWithDetails, AppointmentStep } from "@/types/appointment";
+import type { Patient } from "@/types/patient";
+import { generateDailyTimeSlots } from "@/lib/scheduling/generate-slots";
+import { formatTimeVN } from "@/utils/format-time";
+
+export async function getDayTimeline(dateStr: string): Promise<DayTimelineData> {
+  const supabase = await createClient();
+
+  // 1. Fetch active doctors
+  const { data: doctors } = await supabase
+    .from("staff")
+    .select("id, staff_code, full_name")
+    .eq("role_type", "DOCTOR")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+
+  const docList = (doctors as Array<{ id: string; staff_code: string; full_name: string }>) || [];
+
+  // 2. Fetch appointments for this day
+  const { data: appointments } = await supabase
+    .from("appointments")
+    .select(`
+      *,
+      patients(id, patient_code, full_name),
+      treatment_courses(course_no),
+      staff:doctor_id(full_name),
+      appointment_steps(*)
+    `)
+    .eq("appointment_date", dateStr)
+    .neq("status", "CANCELLED")
+    .order("scheduled_start_at", { ascending: true });
+
+  const apptList = (appointments as unknown as Array<Record<string, unknown>>) || [];
+
+  // 3. Generate 5-minute time slots
+  const timeSlots = generateDailyTimeSlots({
+    openTime: "07:00",
+    closeTime: "17:00",
+    intervalMinutes: 5,
+  });
+
+  // Map appointments to formatted details
+  const formattedAppts: AppointmentWithDetails[] = apptList.map((a) => {
+    const patient = a.patients as unknown as Patient;
+    const course = a.treatment_courses as unknown as { course_no: number };
+    const doctor = a.staff as { full_name?: string } | null;
+
+    return {
+      id: a.id as string,
+      patient_id: a.patient_id as string,
+      treatment_course_id: a.treatment_course_id as string,
+      doctor_id: a.doctor_id as string | null,
+      appointment_date: a.appointment_date as string,
+      scheduled_start_at: a.scheduled_start_at as string,
+      scheduled_end_at: a.scheduled_end_at as string | null,
+      status: a.status as AppointmentWithDetails["status"],
+      schedule_source: a.schedule_source as AppointmentWithDetails["schedule_source"],
+      sequence_in_day: a.sequence_in_day as number | null,
+      priority: a.priority as number,
+      manual_override: Boolean(a.manual_override),
+      notes: a.notes as string | null,
+      created_at: a.created_at as string,
+      updated_at: a.updated_at as string,
+      patient_name: patient?.full_name || "Không rõ",
+      patient_code: patient?.patient_code || "—",
+      doctor_name: doctor?.full_name || null,
+      course_no: course?.course_no || 1,
+      steps: (a.appointment_steps as AppointmentStep[]) || [],
+    };
+  });
+
+  // Group into DayTimelineSlots
+  const slots: DayTimelineSlot[] = timeSlots.map((timeStr) => {
+    const appointmentsByDoctor: Record<string, AppointmentWithDetails[]> = {};
+
+    for (const doc of docList) {
+      appointmentsByDoctor[doc.id] = [];
+    }
+
+    // Assign appointments starting within this slot
+    for (const appt of formattedAppts) {
+      if (appt.doctor_id && appt.scheduled_start_at) {
+        const apptTime = formatTimeVN(appt.scheduled_start_at.split("T")[1]?.slice(0, 5));
+        if (apptTime === timeStr) {
+          if (!appointmentsByDoctor[appt.doctor_id]) {
+            appointmentsByDoctor[appt.doctor_id] = [];
+          }
+          appointmentsByDoctor[appt.doctor_id].push(appt);
+        }
+      }
+    }
+
+    return {
+      time_str: timeStr,
+      appointments_by_doctor: appointmentsByDoctor,
+    };
+  });
+
+  return {
+    date_str: dateStr,
+    doctors: docList.map((d) => ({ id: d.id, name: d.full_name, code: d.staff_code })),
+    slots,
+    total_appointments: apptList.length,
+  };
+}
