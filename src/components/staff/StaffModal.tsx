@@ -6,10 +6,12 @@ import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
 import {
   createStaffAction,
   updateStaffAction,
   assignStaffClinicAction,
+  provisionStaffAuthAccountAction,
 } from "@/app/actions/staff-actions";
 
 export interface StaffModalProps {
@@ -59,6 +61,44 @@ const StaffModalForm: React.FC<StaffModalFormProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Auth Provisioning State
+  const [showProvisionForm, setShowProvisionForm] = useState<boolean>(false);
+  const [loginEmail, setLoginEmail] = useState<string>(selectedStaff?.email || "");
+  const [isProvisioning, setIsProvisioning] = useState<boolean>(false);
+  const [provisionError, setProvisionError] = useState<string | null>(null);
+  const [provisionSuccess, setProvisionSuccess] = useState<string | null>(null);
+
+  const handleProvisionAuth = async () => {
+    if (!selectedStaff) return;
+    if (!loginEmail.trim()) {
+      setProvisionError("Vui lòng nhập email đăng nhập.");
+      return;
+    }
+
+    setIsProvisioning(true);
+    setProvisionError(null);
+    setProvisionSuccess(null);
+
+    try {
+      const res = await provisionStaffAuthAccountAction({
+        staff_id: selectedStaff.id,
+        login_email: loginEmail.trim(),
+      });
+
+      if (!res.success) {
+        setProvisionError(res.error || "Lỗi cấp tài khoản đăng nhập.");
+      } else {
+        setProvisionSuccess("Đã tạo tài khoản và gửi lời mời thiết lập mật khẩu!");
+        setShowProvisionForm(false);
+        onSuccess();
+      }
+    } catch (err: unknown) {
+      setProvisionError((err as Error).message || "Lỗi cấp tài khoản đăng nhập.");
+    } finally {
+      setIsProvisioning(false);
+    }
+  };
+
   const handleRoleToggle = (code: ClinicRoleCode) => {
     if (selectedRoles.includes(code)) {
       if (selectedRoles.length > 1) {
@@ -84,12 +124,12 @@ const StaffModalForm: React.FC<StaffModalFormProps> = ({
           email: email.trim() || null,
           clinic_assignments: selectedClinicId
             ? [
-                {
-                  clinic_id: selectedClinicId,
-                  is_primary: isPrimary,
-                  roles: selectedRoles,
-                },
-              ]
+              {
+                clinic_id: selectedClinicId,
+                is_primary: isPrimary,
+                roles: selectedRoles,
+              },
+            ]
             : [],
         });
 
@@ -150,7 +190,7 @@ const StaffModalForm: React.FC<StaffModalFormProps> = ({
 
             <Input
               label="Họ Và Tên *"
-              placeholder="VD: BS. Nguyễn Văn Hải"
+              placeholder="VD: BS. Nguyễn Minh Thu"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
@@ -173,6 +213,104 @@ const StaffModalForm: React.FC<StaffModalFormProps> = ({
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
+
+          {mode === "EDIT" && selectedStaff && (
+            <div className="pt-4 border-t border-slate-100 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-teal-800">
+                Tài Khoản Đăng Nhập
+              </h4>
+
+              {selectedStaff.user_id ? (
+                selectedStaff.auth_setup_required ? (
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-amber-800">⏳ Chờ nhân viên thiết lập mật khẩu</span>
+                      <p className="text-[11px] text-amber-700">
+                        Tài khoản đã được tạo và gửi lời mời. Nhân viên cần hoàn tất thiết lập mật khẩu cá nhân trước khi sử dụng hệ thống.
+                      </p>
+                    </div>
+                    <Badge variant="warning" size="sm">Chờ thiết lập</Badge>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-emerald-800">✅ Đã kích hoạt tài khoản</span>
+                      <p className="text-[11px] text-emerald-700">
+                        Hồ sơ nhân viên đã được liên kết tài khoản và hoàn tất thiết lập mật khẩu.
+                      </p>
+                    </div>
+                    <Badge variant="success" size="sm">Đã kích hoạt</Badge>
+                  </div>
+                )
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-semibold text-slate-800">Trạng thái: Chưa có tài khoản</span>
+                      <p className="text-[11px] text-slate-600">
+                        Nhân viên chưa có tài khoản đăng nhập vào hệ thống.
+                      </p>
+                    </div>
+                    {!showProvisionForm && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="primary"
+                        onClick={() => setShowProvisionForm(true)}
+                      >
+                        Cấp Tài Khoản
+                      </Button>
+                    )}
+                  </div>
+
+                  {showProvisionForm && (
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                      <h5 className="text-xs font-bold text-slate-800">Cấp Tài Khoản & Gửi Lời Mời Thiết Lập</h5>
+                      <p className="text-[11px] text-slate-500">
+                        Hệ thống sẽ tạo tài khoản và gửi liên kết mời nhân viên tự thiết lập mật khẩu đăng nhập riêng.
+                      </p>
+                      {provisionError && <Alert variant="error">{provisionError}</Alert>}
+                      {provisionSuccess && <Alert variant="success">{provisionSuccess}</Alert>}
+
+                      <div className="space-y-3">
+                        <Input
+                          label="Email Đăng Nhập *"
+                          type="email"
+                          placeholder="VD: doctor.hai@thuanthien.vn"
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
+                          required
+                        />
+                        <div className="flex items-center justify-end gap-2 pt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setShowProvisionForm(false);
+                              setProvisionError(null);
+                            }}
+                            disabled={isProvisioning}
+                          >
+                            Hủy
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="primary"
+                            onClick={handleProvisionAuth}
+                            isLoading={isProvisioning}
+                          >
+                            Xác Nhận Gửi Lời Mời
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -229,11 +367,10 @@ const StaffModalForm: React.FC<StaffModalFormProps> = ({
                 return (
                   <label
                     key={role.code}
-                    className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
-                      isChecked
+                    className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${isChecked
                         ? "bg-teal-50/80 border-teal-400 text-teal-900 font-semibold"
                         : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -274,15 +411,15 @@ export const StaffModal: React.FC<StaffModalProps> = ({
     mode === "CREATE"
       ? "Thêm Nhân Viên Mới"
       : mode === "EDIT"
-      ? `Cập Nhật Hồ Sơ: ${selectedStaff?.full_name}`
-      : `Phân Công Cơ Sở: ${selectedStaff?.full_name}`;
+        ? `Cập Nhật Hồ Sơ: ${selectedStaff?.full_name}`
+        : `Phân Công Cơ Sở: ${selectedStaff?.full_name}`;
 
   const modalDescription =
     mode === "CREATE"
       ? "Tạo hồ sơ nhân viên mới và phân công vào các cơ sở phòng khám."
       : mode === "EDIT"
-      ? "Chỉnh sửa thông tin liên hệ và danh xưng nhân viên."
-      : "Gán nhân viên vào cơ sở phòng khám và phân quyền vai trò cụ thể.";
+        ? "Chỉnh sửa thông tin liên hệ và danh xưng nhân viên."
+        : "Gán nhân viên vào cơ sở phòng khám và phân quyền vai trò cụ thể.";
 
   return (
     <Modal

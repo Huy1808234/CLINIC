@@ -51,6 +51,9 @@ export interface StaffClinicRole {
 
 export interface StaffWithClinicMemberships {
   id: string;
+  user_id?: string | null;
+  auth_setup_required?: boolean;
+  auth_setup_completed_at?: string | null;
   staff_code: string;
   full_name: string;
   phone: string | null;

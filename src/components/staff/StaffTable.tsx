@@ -116,9 +116,24 @@ export const StaffTable: React.FC<StaffTableProps> = ({
                 )}
               </td>
               <td className="py-3.5 px-4 text-center">
-                <Badge variant={staff.is_active ? "success" : "default"} size="sm">
-                  {staff.is_active ? "Hoạt động" : "Đã khóa"}
-                </Badge>
+                <div className="flex flex-col items-center gap-1">
+                  <Badge variant={staff.is_active ? "success" : "default"} size="sm">
+                    {staff.is_active ? "Hoạt động" : "Đã khóa"}
+                  </Badge>
+                  {staff.user_id ? (
+                    staff.auth_setup_required ? (
+                      <span className="text-[10px] text-amber-700 font-medium bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                        Chờ thiết lập
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-teal-700 font-medium bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                        Đã kích hoạt
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-[10px] text-slate-400 font-medium">Chưa có TK</span>
+                  )}
+                </div>
               </td>
               <td className="py-3.5 px-4 text-right">
                 <div className="flex items-center justify-end gap-1.5">

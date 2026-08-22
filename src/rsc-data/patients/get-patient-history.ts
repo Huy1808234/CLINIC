@@ -40,6 +40,7 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     .select(`
       *,
       staff:primary_doctor_id(full_name),
+      planned_by_doctor:planned_by_doctor_id(full_name),
       course_diagnoses(raw_code, raw_text),
       course_service_orders(service_catalog(service_name))
     `)
@@ -59,6 +60,7 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
 
   const formattedCourses = ((courses as unknown as Array<Record<string, unknown>>) || []).map((c) => {
     const doctorName = (c.staff as { full_name?: string } | null)?.full_name || null;
+    const plannedByDoctorName = (c.planned_by_doctor as { full_name?: string } | null)?.full_name || null;
     const diagnoses = ((c.course_diagnoses as Array<{ raw_code?: string; raw_text?: string }>) || [])
       .map((d) => d.raw_code || d.raw_text || "")
       .filter(Boolean);
@@ -70,8 +72,11 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
       id: c.id as string,
       course_no: c.course_no as number,
       start_date: c.start_date as string,
-      planned_session_count: c.planned_session_count as number,
-      completed_session_count: c.completed_session_count as number,
+      planned_session_count: (c.planned_session_count as number | null) ?? null,
+      planned_by_doctor_id: (c.planned_by_doctor_id as string | null) || null,
+      planned_by_doctor_name: plannedByDoctorName,
+      planned_at: (c.planned_at as string | null) || null,
+      completed_session_count: (c.completed_session_count as number) || 0,
       status: c.status as PatientHistorySummary["treatment_courses"][number]["status"],
       adherence_status: c.adherence_status as PatientHistorySummary["treatment_courses"][number]["adherence_status"],
       doctor_name: doctorName,

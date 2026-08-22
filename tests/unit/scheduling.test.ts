@@ -70,7 +70,7 @@ export function runSchedulingTests() {
     treatment_course_id: "123e4567-e89b-12d3-a456-426614174000",
     doctor_id: "123e4567-e89b-12d3-a456-426614174001",
     start_date: "2026-08-21",
-    planned_session_count: 7,
+    schedule_count: 7,
     preferred_time: "07:34",
   });
   assert(s1.success === true, "Valid auto schedule input must succeed");
@@ -1035,6 +1035,848 @@ export function runSchedulingTests() {
   });
   assert(resC20.success === false && resC20.error === "Dữ liệu buổi điều trị không nhất quán. Vui lòng liên hệ quản trị viên.", "CASE C-20: INCONSISTENT_COMPLETION_STATE message");
 
+  // 11. SCHED-GOV1B AUTO-SCHEDULER FAIL-CLOSED & FALLBACK REMOVAL TESTS
+  interface MockScheduleRpcResponse {
+    data: unknown;
+    error: unknown;
+  }
+
+  let mockScheduleRpcState: MockScheduleRpcResponse = {
+    data: {
+      success: true,
+      status: "FULL",
+      scheduled_count: 7,
+      requested_count: 7,
+      appointment_ids: ["appt-1", "appt-2", "appt-3", "appt-4", "appt-5", "appt-6", "appt-7"],
+    },
+    error: null,
+  };
+
+  let directAppointmentWritesCount = 0;
+  let directCourseUpdatesCount = 0;
+
+  function simulateExecuteAutoSchedule(input: {
+    treatment_course_id: string;
+    doctor_id: string;
+    start_date: string;
+    schedule_count: number;
+    preferred_time?: string;
+    selected_weekdays?: number[];
+  }) {
+    directAppointmentWritesCount = 0;
+    directCourseUpdatesCount = 0;
+
+    try {
+      if (mockScheduleRpcState.error || !mockScheduleRpcState.data) {
+        // FAIL CLOSED: Return failure, do NOT execute fallback writes
+        return {
+          success: false,
+          status: "FAILED",
+          scheduled_count: 0,
+          requested_count: input.schedule_count,
+          appointment_ids: [],
+          message: "Không thể tự động xếp lịch lúc này. Vui lòng thử lại.",
+        };
+      }
+
+      const res = mockScheduleRpcState.data as {
+        success: boolean;
+        status?: "FULL" | "PARTIAL" | "FAILED";
+        error_code?: string;
+        scheduled_count?: number;
+        requested_count?: number;
+        appointment_ids?: string[];
+        message?: string;
+      };
+
+      if (!res.success) {
+        let localizedMessage = res.message || "Không thể tự động xếp lịch lúc này. Vui lòng thử lại.";
+        if (res.error_code === "PLAN_NOT_ESTABLISHED") {
+          localizedMessage = "Bác sĩ chưa thiết lập kế hoạch điều trị cho liệu trình này.";
+        } else if (res.error_code === "EXCEEDS_PLAN_CAPACITY") {
+          localizedMessage = "Số lịch muốn xếp vượt quá số buổi còn lại trong kế hoạch điều trị.";
+        } else if (res.error_code === "INVALID_SCHEDULE_COUNT") {
+          localizedMessage = "Số lịch muốn xếp phải lớn hơn 0.";
+        }
+
+        return {
+          success: false,
+          status: res.status || "FAILED",
+          scheduled_count: res.scheduled_count || 0,
+          requested_count: res.requested_count || input.schedule_count,
+          appointment_ids: res.appointment_ids || [],
+          message: localizedMessage,
+        };
+      }
+
+      return {
+        success: true,
+        status: res.status || "FULL",
+        scheduled_count: res.scheduled_count ?? input.schedule_count,
+        requested_count: res.requested_count ?? input.schedule_count,
+        appointment_ids: res.appointment_ids || [],
+        message: `Xếp lịch tự động thành công (${res.scheduled_count ?? input.schedule_count}/${res.requested_count ?? input.schedule_count} buổi).`,
+      };
+    } catch {
+      return {
+        success: false,
+        status: "FAILED",
+        scheduled_count: 0,
+        requested_count: input.schedule_count,
+        appointment_ids: [],
+        message: "Không thể tự động xếp lịch lúc này. Vui lòng thử lại.",
+      };
+    }
+  }
+
+  // CASE G1B-1: RPC success -> auto-scheduling succeeds
+  mockScheduleRpcState = {
+    data: {
+      success: true,
+      status: "FULL",
+      scheduled_count: 7,
+      requested_count: 7,
+      appointment_ids: ["a1", "a2", "a3", "a4", "a5", "a6", "a7"],
+    },
+    error: null,
+  };
+  const resG1B1 = simulateExecuteAutoSchedule({
+    treatment_course_id: "course-tt01-1",
+    doctor_id: "doc-tt01-active",
+    start_date: "2026-08-25",
+    schedule_count: 7,
+  });
+  assert(resG1B1.success === true, "CASE G1B-1: RPC success must succeed");
+  assert(resG1B1.scheduled_count === 7, "CASE G1B-1: 7 scheduled");
+  assert(directAppointmentWritesCount === 0, "CASE G1B-1: Zero direct writes");
+
+  // CASE G1B-2: RPC transport error -> safe failure, zero direct Appointment insert
+  mockScheduleRpcState = { data: null, error: new Error("Network connection lost") };
+  const resG1B2 = simulateExecuteAutoSchedule({
+    treatment_course_id: "course-tt01-1",
+    doctor_id: "doc-tt01-active",
+    start_date: "2026-08-25",
+    schedule_count: 7,
+  });
+  assert(resG1B2.success === false, "CASE G1B-2: Transport error fails closed");
+  assert(resG1B2.message === "Không thể tự động xếp lịch lúc này. Vui lòng thử lại.", "CASE G1B-2: Safe message");
+  assert(directAppointmentWritesCount === 0, "CASE G1B-2: Zero direct appointment inserts");
+  assert(directCourseUpdatesCount === 0, "CASE G1B-2: Zero direct course updates");
+
+  // CASE G1B-3: RPC database/domain error -> safe failure, zero fallback writes
+  mockScheduleRpcState = { data: { success: false, status: "FAILED", message: "Treatment course not found." }, error: null };
+  const resG1B3 = simulateExecuteAutoSchedule({
+    treatment_course_id: "course-nonexistent",
+    doctor_id: "doc-tt01-active",
+    start_date: "2026-08-25",
+    schedule_count: 7,
+  });
+  assert(resG1B3.success === false, "CASE G1B-3: Domain error fails closed");
+  assert(directAppointmentWritesCount === 0, "CASE G1B-3: Zero fallback appointment writes");
+  assert(directCourseUpdatesCount === 0, "CASE G1B-3: Zero fallback course updates");
+
+  // CASE G1B-4: RPC permission error -> safe failure, no alternate mutation path
+  mockScheduleRpcState = { data: null, error: new Error("permission denied for function schedule_treatment_course") };
+  const resG1B4 = simulateExecuteAutoSchedule({
+    treatment_course_id: "course-tt01-1",
+    doctor_id: "doc-tt01-active",
+    start_date: "2026-08-25",
+    schedule_count: 7,
+  });
+  assert(resG1B4.success === false, "CASE G1B-4: Permission error fails closed");
+  assert(directAppointmentWritesCount === 0, "CASE G1B-4: Zero direct writes on permission error");
+
+  // CASE G1B-5: Future-like error PLAN_NOT_ESTABLISHED -> does NOT enter direct fallback
+  mockScheduleRpcState = { data: { success: false, status: "FAILED", error_code: "PLAN_NOT_ESTABLISHED", message: "PLAN_NOT_ESTABLISHED" }, error: null };
+  const resG1B5 = simulateExecuteAutoSchedule({
+    treatment_course_id: "course-tt01-1",
+    doctor_id: "doc-tt01-active",
+    start_date: "2026-08-25",
+    schedule_count: 7,
+  });
+  assert(resG1B5.success === false, "CASE G1B-5: Future plan error fails closed");
+  assert(resG1B5.message === "Bác sĩ chưa thiết lập kế hoạch điều trị cho liệu trình này.", "CASE G1B-5: Safe localized error message");
+  assert(directAppointmentWritesCount === 0, "CASE G1B-5: Zero fallback writes on plan error");
+  assert(directCourseUpdatesCount === 0, "CASE G1B-5: Zero fallback course updates");
+
+  // CASE G1B-6: RPC function unavailable -> failure, no local scheduling fallback
+  mockScheduleRpcState = { data: null, error: new Error("function public.schedule_treatment_course does not exist") };
+  const resG1B6 = simulateExecuteAutoSchedule({
+    treatment_course_id: "course-tt01-1",
+    doctor_id: "doc-tt01-active",
+    start_date: "2026-08-25",
+    schedule_count: 7,
+  });
+  assert(resG1B6.success === false, "CASE G1B-6: Function missing fails closed");
+  assert(directAppointmentWritesCount === 0, "CASE G1B-6: Zero fallback writes when function missing");
+
+  // 12. SCHED-RESCH1 APPOINTMENT RESCHEDULE LIFECYCLE & IN-PLACE PLANNED STATUS TESTS
+  interface MockRescheduleAppt {
+    id: string;
+    treatment_course_id: string;
+    doctor_id: string;
+    appointment_date: string;
+    scheduled_start_at: string;
+    status: string;
+    manual_override: boolean;
+  }
+
+  const rescheduleDb: MockRescheduleAppt[] = [
+    {
+      id: "appt-resch-planned",
+      treatment_course_id: "course-tt01-1",
+      doctor_id: "doc-tt01-active",
+      appointment_date: "2026-08-25",
+      scheduled_start_at: "2026-08-25T08:00:00+07:00",
+      status: "PLANNED",
+      manual_override: false,
+    },
+    {
+      id: "appt-resch-checkedin",
+      treatment_course_id: "course-tt01-1",
+      doctor_id: "doc-tt01-active",
+      appointment_date: "2026-08-25",
+      scheduled_start_at: "2026-08-25T08:00:00+07:00",
+      status: "CHECKED_IN",
+      manual_override: false,
+    },
+    {
+      id: "appt-resch-intreatment",
+      treatment_course_id: "course-tt01-1",
+      doctor_id: "doc-tt01-active",
+      appointment_date: "2026-08-25",
+      scheduled_start_at: "2026-08-25T08:00:00+07:00",
+      status: "IN_TREATMENT",
+      manual_override: false,
+    },
+    {
+      id: "appt-resch-completed",
+      treatment_course_id: "course-tt01-1",
+      doctor_id: "doc-tt01-active",
+      appointment_date: "2026-08-25",
+      scheduled_start_at: "2026-08-25T08:00:00+07:00",
+      status: "COMPLETED",
+      manual_override: false,
+    },
+    {
+      id: "appt-resch-cancelled",
+      treatment_course_id: "course-tt01-1",
+      doctor_id: "doc-tt01-active",
+      appointment_date: "2026-08-25",
+      scheduled_start_at: "2026-08-25T08:00:00+07:00",
+      status: "CANCELLED",
+      manual_override: false,
+    },
+    {
+      id: "appt-resch-noshow",
+      treatment_course_id: "course-tt01-1",
+      doctor_id: "doc-tt01-active",
+      appointment_date: "2026-08-25",
+      scheduled_start_at: "2026-08-25T08:00:00+07:00",
+      status: "NO_SHOW",
+      manual_override: false,
+    },
+    {
+      id: "appt-resch-legacy",
+      treatment_course_id: "course-tt01-1",
+      doctor_id: "doc-tt01-active",
+      appointment_date: "2026-08-25",
+      scheduled_start_at: "2026-08-25T08:00:00+07:00",
+      status: "RESCHEDULED",
+      manual_override: true,
+    },
+  ];
+
+  let rescheduleAuditEvents: Array<{ action: string; entity_id: string; before: unknown; after: unknown }> = [];
+
+  function simulateRescheduleService(params: {
+    appointmentId: string;
+    newDate: string;
+    newStartAt: string;
+    newDoctorId?: string;
+  }) {
+    const existing = rescheduleDb.find((a) => a.id === params.appointmentId);
+    if (!existing) {
+      throw new Error("Appointment not found.");
+    }
+
+    const ALLOWED_RESCHEDULE_SOURCE_STATUSES = ["PLANNED", "CONFIRMED", "RESCHEDULED"];
+    if (!ALLOWED_RESCHEDULE_SOURCE_STATUSES.includes(existing.status)) {
+      throw new Error(
+        `Không thể đổi lịch cho lịch hẹn ở trạng thái ${existing.status}. Chỉ cho phép đổi lịch các lịch hẹn chưa khám/trị liệu.`
+      );
+    }
+
+    const beforeData = { ...existing };
+    existing.appointment_date = params.newDate;
+    existing.scheduled_start_at = params.newStartAt;
+    if (params.newDoctorId) {
+      existing.doctor_id = params.newDoctorId;
+    }
+    existing.status = "PLANNED";
+    existing.manual_override = true;
+
+    rescheduleAuditEvents.push({
+      action: "RESCHEDULE_APPOINTMENT",
+      entity_id: existing.id,
+      before: beforeData,
+      after: { ...existing },
+    });
+
+    return { ...existing };
+  }
+
+  // CASE RESCH-1: PLANNED Appointment is rescheduled -> same row, new date/time, status = PLANNED
+  const initialApptCount = rescheduleDb.length;
+  rescheduleAuditEvents = [];
+  const resResch1 = simulateRescheduleService({
+    appointmentId: "appt-resch-planned",
+    newDate: "2026-08-28",
+    newStartAt: "2026-08-28T09:30:00+07:00",
+  });
+  assert(resResch1.id === "appt-resch-planned", "CASE RESCH-1: Same appointment ID retained");
+  assert(resResch1.appointment_date === "2026-08-28", "CASE RESCH-1: Date updated");
+  assert(resResch1.scheduled_start_at === "2026-08-28T09:30:00+07:00", "CASE RESCH-1: Time updated");
+  assert(resResch1.status === "PLANNED", "CASE RESCH-1: Status must be PLANNED (NOT RESCHEDULED)");
+  assert(rescheduleDb.length === initialApptCount, "CASE RESCH-3: No second appointment row created");
+  assert(rescheduleAuditEvents.length === 1, "CASE RESCH-14: Audit event recorded");
+  assert(rescheduleAuditEvents[0].action === "RESCHEDULE_APPOINTMENT", "CASE RESCH-14: Audit action name");
+
+  // CASE RESCH-2: Rescheduled Appointment can subsequently follow PLANNED -> CHECKED_IN
+  const resCheckin = simulateUpdateAppointmentStatusWorkflow({
+    callerRoles: ["RECEPTIONIST"],
+    activeClinicId: "clinic-tt01",
+    appointmentId: "appt-planned-tt01",
+    requestedStatus: "CHECKED_IN",
+  });
+  assert(resCheckin.success === true, "CASE RESCH-2: Rescheduled PLANNED appointment can be checked in");
+
+  // CASE RESCH-4: COMPLETED Appointment cannot be rescheduled -> Zero mutation
+  let completedReschDenied = false;
+  try {
+    simulateRescheduleService({
+      appointmentId: "appt-resch-completed",
+      newDate: "2026-08-28",
+      newStartAt: "2026-08-28T09:30:00+07:00",
+    });
+  } catch (err: unknown) {
+    completedReschDenied = true;
+    assert((err as Error).message.includes("COMPLETED"), "CASE RESCH-4: Error message indicates COMPLETED");
+  }
+  assert(completedReschDenied, "CASE RESCH-4: COMPLETED appointment reschedule denied");
+
+  // CASE RESCH-5: IN_TREATMENT Appointment cannot be rescheduled -> Zero mutation
+  let intreatReschDenied = false;
+  try {
+    simulateRescheduleService({
+      appointmentId: "appt-resch-intreatment",
+      newDate: "2026-08-28",
+      newStartAt: "2026-08-28T09:30:00+07:00",
+    });
+  } catch (err: unknown) {
+    intreatReschDenied = true;
+    assert((err as Error).message.includes("IN_TREATMENT"), "CASE RESCH-5: Error message indicates IN_TREATMENT");
+  }
+  assert(intreatReschDenied, "CASE RESCH-5: IN_TREATMENT appointment reschedule denied");
+
+  // CASE RESCH-6: CHECKED_IN Appointment cannot be rescheduled -> Zero mutation
+  let checkedinReschDenied = false;
+  try {
+    simulateRescheduleService({
+      appointmentId: "appt-resch-checkedin",
+      newDate: "2026-08-28",
+      newStartAt: "2026-08-28T09:30:00+07:00",
+    });
+  } catch (err: unknown) {
+    checkedinReschDenied = true;
+    assert((err as Error).message.includes("CHECKED_IN"), "CASE RESCH-6: Error message indicates CHECKED_IN");
+  }
+  assert(checkedinReschDenied, "CASE RESCH-6: CHECKED_IN appointment reschedule denied");
+
+  // CASE RESCH-7: CANCELLED Appointment cannot be rescheduled -> Zero mutation
+  let cancelledReschDenied = false;
+  try {
+    simulateRescheduleService({
+      appointmentId: "appt-resch-cancelled",
+      newDate: "2026-08-28",
+      newStartAt: "2026-08-28T09:30:00+07:00",
+    });
+  } catch (err: unknown) {
+    cancelledReschDenied = true;
+    assert((err as Error).message.includes("CANCELLED"), "CASE RESCH-7: Error message indicates CANCELLED");
+  }
+  assert(cancelledReschDenied, "CASE RESCH-7: CANCELLED appointment reschedule denied");
+
+  // CASE RESCH-8: NO_SHOW Appointment cannot be rescheduled -> Zero mutation
+  let noshowReschDenied = false;
+  try {
+    simulateRescheduleService({
+      appointmentId: "appt-resch-noshow",
+      newDate: "2026-08-28",
+      newStartAt: "2026-08-28T09:30:00+07:00",
+    });
+  } catch (err: unknown) {
+    noshowReschDenied = true;
+    assert((err as Error).message.includes("NO_SHOW"), "CASE RESCH-8: Error message indicates NO_SHOW");
+  }
+  assert(noshowReschDenied, "CASE RESCH-8: NO_SHOW appointment reschedule denied");
+
+  // Legacy RESCHEDULED status recovery to PLANNED
+  const resLegacyRecover = simulateRescheduleService({
+    appointmentId: "appt-resch-legacy",
+    newDate: "2026-08-29",
+    newStartAt: "2026-08-29T10:00:00+07:00",
+  });
+  assert(resLegacyRecover.status === "PLANNED", "Legacy RESCHEDULED appointment normalizes to PLANNED");
+
+  // 13. SCHED-PLAN1B PLAN CAPACITY GUARD & SCHEDULE_TREATMENT_COURSE RPC TESTS
+  interface MockPlanCourse {
+    id: string;
+    patient_id: string;
+    primary_doctor_id: string;
+    planned_session_count: number | null;
+    completed_session_count: number;
+    planned_end_date?: string | null;
+  }
+
+  interface MockPlanAppt {
+    id: string;
+    treatment_course_id: string;
+    doctor_id: string;
+    appointment_date: string;
+    status: string;
+  }
+
+  function simulateScheduleTreatmentCourseRpc(
+    course: MockPlanCourse,
+    existingAppts: MockPlanAppt[],
+    params: {
+      doctorId: string;
+      startDate: string;
+      requestedCount: number;
+      preferredTime?: string;
+      selectedWeekdays?: number[];
+    }
+  ) {
+    // 1. Validate requested schedule count
+    if (!params.requestedCount || params.requestedCount <= 0) {
+      return {
+        success: false,
+        status: "FAILED",
+        error_code: "INVALID_SCHEDULE_COUNT",
+        message: "Số buổi yêu cầu xếp lịch phải lớn hơn 0.",
+      };
+    }
+
+    // 2. Lock & Check Plan Guard
+    if (course.planned_session_count === null || course.planned_session_count <= 0) {
+      return {
+        success: false,
+        status: "FAILED",
+        error_code: "PLAN_NOT_ESTABLISHED",
+        message: "Bác sĩ chưa thiết lập kế hoạch điều trị cho liệu trình này.",
+      };
+    }
+
+    // 3. Calculate active allocated appointments (excludes CANCELLED, NO_SHOW, and COMPLETED)
+    const activeStatuses = ["PLANNED", "CONFIRMED", "CHECKED_IN", "IN_EXAM", "IN_TREATMENT", "RESCHEDULED"];
+    const courseAppts = existingAppts.filter((a) => a.treatment_course_id === course.id);
+    const activeAllocatedCount = courseAppts.filter((a) => activeStatuses.includes(a.status)).length;
+
+    // 4. Calculate allocated units and remaining capacity under lock
+    const allocatedPlanUnits = course.completed_session_count + activeAllocatedCount;
+    const remainingSchedulableSlots = course.planned_session_count - allocatedPlanUnits;
+
+    // 5. Refuse over-scheduling
+    if (params.requestedCount > remainingSchedulableSlots) {
+      return {
+        success: false,
+        status: "FAILED",
+        error_code: "EXCEEDS_PLAN_CAPACITY",
+        message: "Số buổi yêu cầu xếp lịch vượt quá số buổi còn lại trong kế hoạch điều trị.",
+        planned_session_count: course.planned_session_count,
+        completed_session_count: course.completed_session_count,
+        active_allocated_count: activeAllocatedCount,
+        remaining_schedulable_slots: remainingSchedulableSlots,
+        requested_count: params.requestedCount,
+      };
+    }
+
+    // 6. Generate appointments
+    const createdAppts: MockPlanAppt[] = [];
+    const curDate = new Date(params.startDate);
+    const weekdays = params.selectedWeekdays || [1, 2, 3, 4, 5, 6];
+
+    while (createdAppts.length < params.requestedCount) {
+      const dow = curDate.getDay(); // 0=Sun, 1=Mon...
+      const dateStr = curDate.toISOString().slice(0, 10);
+      if (weekdays.includes(dow) && dow !== 0) {
+        const hasConflict = courseAppts.some((a) => a.appointment_date === dateStr && a.status !== "CANCELLED");
+        if (!hasConflict) {
+          const newAppt: MockPlanAppt = {
+            id: `appt-gen-${createdAppts.length + 1}`,
+            treatment_course_id: course.id,
+            doctor_id: params.doctorId,
+            appointment_date: dateStr,
+            status: "PLANNED",
+          };
+          createdAppts.push(newAppt);
+          existingAppts.push(newAppt);
+        }
+      }
+      curDate.setDate(curDate.getDate() + 1);
+    }
+
+    // 7. Update scheduling-derived planned_end_date (NEVER overwrite planned_session_count or primary_doctor_id!)
+    const relevantStatuses = ["PLANNED", "CONFIRMED", "CHECKED_IN", "IN_EXAM", "IN_TREATMENT", "COMPLETED", "RESCHEDULED"];
+    const allRelevant = existingAppts.filter((a) => a.treatment_course_id === course.id && relevantStatuses.includes(a.status));
+    if (allRelevant.length > 0) {
+      const dates = allRelevant.map((a) => a.appointment_date).sort();
+      course.planned_end_date = dates[dates.length - 1];
+    }
+
+    return {
+      success: true,
+      status: createdAppts.length === params.requestedCount ? "FULL" : "PARTIAL",
+      scheduled_count: createdAppts.length,
+      requested_count: params.requestedCount,
+      appointment_ids: createdAppts.map((a) => a.id),
+    };
+  }
+
+  // CASE PLAN1B-1: Plan = 10, completed = 0, active = 0, request = 3 -> 3 scheduled, plan remains 10
+  const course1: MockPlanCourse = {
+    id: "course-p1",
+    patient_id: "pat-1",
+    primary_doctor_id: "doc-orig",
+    planned_session_count: 10,
+    completed_session_count: 0,
+  };
+  const appts1: MockPlanAppt[] = [];
+  const resP1 = simulateScheduleTreatmentCourseRpc(course1, appts1, {
+    doctorId: "doc-appt-sched",
+    startDate: "2026-08-25",
+    requestedCount: 3,
+  });
+  assert(resP1.success === true, "CASE PLAN1B-1: Succeeded");
+  assert(resP1.scheduled_count === 3, "CASE PLAN1B-1: 3 scheduled");
+  assert(course1.planned_session_count === 10, "CASE PLAN1B-14: planned_session_count remains 10 (never overwritten!)");
+  assert(course1.primary_doctor_id === "doc-orig", "CASE PLAN1B-15: primary_doctor_id remains doc-orig (never overwritten!)");
+
+  // CASE PLAN1B-2: Plan = 10, completed = 3, active = 2, request = 3 -> allowed (remaining = 5)
+  const course2: MockPlanCourse = {
+    id: "course-p2",
+    patient_id: "pat-2",
+    primary_doctor_id: "doc-orig",
+    planned_session_count: 10,
+    completed_session_count: 3,
+  };
+  const appts2: MockPlanAppt[] = [
+    { id: "a1", treatment_course_id: "course-p2", doctor_id: "doc-1", appointment_date: "2026-08-20", status: "PLANNED" },
+    { id: "a2", treatment_course_id: "course-p2", doctor_id: "doc-1", appointment_date: "2026-08-21", status: "PLANNED" },
+  ];
+  const resP2 = simulateScheduleTreatmentCourseRpc(course2, appts2, {
+    doctorId: "doc-1",
+    startDate: "2026-08-25",
+    requestedCount: 3,
+  });
+  assert(resP2.success === true, "CASE PLAN1B-2: Succeeded because 3 + 2 + 3 <= 10");
+
+  // CASE PLAN1B-3: Plan = 10, completed = 3, active = 5, request = 3 -> remaining = 2 -> EXCEEDS_PLAN_CAPACITY
+  const course3: MockPlanCourse = {
+    id: "course-p3",
+    patient_id: "pat-3",
+    primary_doctor_id: "doc-orig",
+    planned_session_count: 10,
+    completed_session_count: 3,
+  };
+  const appts3: MockPlanAppt[] = [
+    { id: "a1", treatment_course_id: "course-p3", doctor_id: "doc-1", appointment_date: "2026-08-20", status: "PLANNED" },
+    { id: "a2", treatment_course_id: "course-p3", doctor_id: "doc-1", appointment_date: "2026-08-21", status: "PLANNED" },
+    { id: "a3", treatment_course_id: "course-p3", doctor_id: "doc-1", appointment_date: "2026-08-22", status: "CONFIRMED" },
+    { id: "a4", treatment_course_id: "course-p3", doctor_id: "doc-1", appointment_date: "2026-08-23", status: "CHECKED_IN" },
+    { id: "a5", treatment_course_id: "course-p3", doctor_id: "doc-1", appointment_date: "2026-08-24", status: "IN_TREATMENT" },
+  ];
+  const initialAppts3Length = appts3.length;
+  const resP3 = simulateScheduleTreatmentCourseRpc(course3, appts3, {
+    doctorId: "doc-1",
+    startDate: "2026-08-25",
+    requestedCount: 3,
+  });
+  assert(resP3.success === false, "CASE PLAN1B-3: Over-scheduling rejected");
+  assert((resP3 as unknown as { error_code: string }).error_code === "EXCEEDS_PLAN_CAPACITY", "CASE PLAN1B-3: Error code EXCEEDS_PLAN_CAPACITY");
+  assert(appts3.length === initialAppts3Length, "CASE PLAN1B-3: Zero new appointments inserted");
+
+  // CASE PLAN1B-4: Plan = 10, completed = 10 -> no additional scheduling allowed
+  const course4: MockPlanCourse = {
+    id: "course-p4",
+    patient_id: "pat-4",
+    primary_doctor_id: "doc-orig",
+    planned_session_count: 10,
+    completed_session_count: 10,
+  };
+  const resP4 = simulateScheduleTreatmentCourseRpc(course4, [], {
+    doctorId: "doc-1",
+    startDate: "2026-08-25",
+    requestedCount: 1,
+  });
+  assert(resP4.success === false, "CASE PLAN1B-4: Fully completed course rejected");
+  assert((resP4 as unknown as { error_code: string }).error_code === "EXCEEDS_PLAN_CAPACITY", "CASE PLAN1B-4: EXCEEDS_PLAN_CAPACITY");
+
+  // CASE PLAN1B-5: CANCELLED appointment does NOT consume plan capacity
+  const course5: MockPlanCourse = {
+    id: "course-p5",
+    patient_id: "pat-5",
+    primary_doctor_id: "doc-orig",
+    planned_session_count: 5,
+    completed_session_count: 0,
+  };
+  const appts5: MockPlanAppt[] = [
+    { id: "c1", treatment_course_id: "course-p5", doctor_id: "doc-1", appointment_date: "2026-08-20", status: "CANCELLED" },
+    { id: "c2", treatment_course_id: "course-p5", doctor_id: "doc-1", appointment_date: "2026-08-21", status: "CANCELLED" },
+  ];
+  const resP5 = simulateScheduleTreatmentCourseRpc(course5, appts5, {
+    doctorId: "doc-1",
+    startDate: "2026-08-25",
+    requestedCount: 5,
+  });
+  assert(resP5.success === true, "CASE PLAN1B-5: CANCELLED appointments do not count towards allocated plan");
+
+  // CASE PLAN1B-6: NO_SHOW appointment does NOT consume plan capacity
+  const course6: MockPlanCourse = {
+    id: "course-p6",
+    patient_id: "pat-6",
+    primary_doctor_id: "doc-orig",
+    planned_session_count: 5,
+    completed_session_count: 0,
+  };
+  const appts6: MockPlanAppt[] = [
+    { id: "ns1", treatment_course_id: "course-p6", doctor_id: "doc-1", appointment_date: "2026-08-20", status: "NO_SHOW" },
+  ];
+  const resP6 = simulateScheduleTreatmentCourseRpc(course6, appts6, {
+    doctorId: "doc-1",
+    startDate: "2026-08-25",
+    requestedCount: 5,
+  });
+  assert(resP6.success === true, "CASE PLAN1B-6: NO_SHOW appointments do not count towards allocated plan");
+
+  // CASE PLAN1B-7: COMPLETED Appointment is NOT double-counted when completed_session_count already contains the delivered session
+  const course7: MockPlanCourse = {
+    id: "course-p7",
+    patient_id: "pat-7",
+    primary_doctor_id: "doc-orig",
+    planned_session_count: 5,
+    completed_session_count: 2,
+  };
+  const appts7: MockPlanAppt[] = [
+    { id: "comp1", treatment_course_id: "course-p7", doctor_id: "doc-1", appointment_date: "2026-08-20", status: "COMPLETED" },
+    { id: "comp2", treatment_course_id: "course-p7", doctor_id: "doc-1", appointment_date: "2026-08-21", status: "COMPLETED" },
+  ];
+  // completed_session_count = 2, active allocated = 0, remaining = 3. Requesting 3 should succeed.
+  const resP7 = simulateScheduleTreatmentCourseRpc(course7, appts7, {
+    doctorId: "doc-1",
+    startDate: "2026-08-25",
+    requestedCount: 3,
+  });
+  assert(resP7.success === true, "CASE PLAN1B-7: COMPLETED appointments not double counted with completed_session_count");
+
+  // CASE PLAN1B-8 to 13: Active statuses count towards plan
+  const course8: MockPlanCourse = {
+    id: "course-p8",
+    patient_id: "pat-8",
+    primary_doctor_id: "doc-orig",
+    planned_session_count: 6,
+    completed_session_count: 0,
+  };
+  const appts8: MockPlanAppt[] = [
+    { id: "st1", treatment_course_id: "course-p8", doctor_id: "doc-1", appointment_date: "2026-08-20", status: "PLANNED" },
+    { id: "st2", treatment_course_id: "course-p8", doctor_id: "doc-1", appointment_date: "2026-08-21", status: "CONFIRMED" },
+    { id: "st3", treatment_course_id: "course-p8", doctor_id: "doc-1", appointment_date: "2026-08-22", status: "CHECKED_IN" },
+    { id: "st4", treatment_course_id: "course-p8", doctor_id: "doc-1", appointment_date: "2026-08-23", status: "IN_EXAM" },
+    { id: "st5", treatment_course_id: "course-p8", doctor_id: "doc-1", appointment_date: "2026-08-24", status: "IN_TREATMENT" },
+    { id: "st6", treatment_course_id: "course-p8", doctor_id: "doc-1", appointment_date: "2026-08-25", status: "RESCHEDULED" },
+  ];
+  const resP8 = simulateScheduleTreatmentCourseRpc(course8, appts8, {
+    doctorId: "doc-1",
+    startDate: "2026-08-26",
+    requestedCount: 1,
+  });
+  assert(resP8.success === false, "CASE PLAN1B-8..13: All 6 active statuses consume plan slots");
+
+  // CASE PLAN1B-16: planned_end_date remains scheduling-derived
+  assert(course1.planned_end_date !== null && course1.planned_end_date !== undefined, "CASE PLAN1B-16: planned_end_date updated");
+
+  // CASE PLAN1B-17: PLAN_NOT_ESTABLISHED when planned_session_count is null or <= 0
+  const courseNull: MockPlanCourse = {
+    id: "course-null",
+    patient_id: "pat-null",
+    primary_doctor_id: "doc-orig",
+    planned_session_count: null,
+    completed_session_count: 0,
+  };
+  const resNull = simulateScheduleTreatmentCourseRpc(courseNull, [], {
+    doctorId: "doc-1",
+    startDate: "2026-08-25",
+    requestedCount: 1,
+  });
+  assert(resNull.success === false, "CASE PLAN1B-17: Null plan rejected");
+  assert((resNull as unknown as { error_code: string }).error_code === "PLAN_NOT_ESTABLISHED", "CASE PLAN1B-17: PLAN_NOT_ESTABLISHED error code");
+
+  // 14. SCHED-PLAN1C APPLICATION & UI SEMANTIC SPLIT TESTS
+  // CASE PLAN1C-1: Scheduling schema accepts schedule_count = 3 without planned_session_count
+  const parsed1C = autoScheduleSchema.safeParse({
+    treatment_course_id: "123e4567-e89b-12d3-a456-426614174000",
+    doctor_id: "123e4567-e89b-12d3-a456-426614174001",
+    start_date: "2026-08-25",
+    schedule_count: 3,
+  });
+  assert(parsed1C.success === true, "CASE PLAN1C-1: Schema validates schedule_count successfully");
+  if (parsed1C.success) {
+    assert(parsed1C.data.schedule_count === 3, "CASE PLAN1C-1: schedule_count value is 3");
+    assert(!("planned_session_count" in parsed1C.data), "CASE PLAN1C-1: planned_session_count is not in parsed output");
+  }
+
+  // CASE PLAN1C-2: Schema rejects non-positive schedule_count
+  const parsedInvalid = autoScheduleSchema.safeParse({
+    treatment_course_id: "123e4567-e89b-12d3-a456-426614174000",
+    doctor_id: "123e4567-e89b-12d3-a456-426614174001",
+    start_date: "2026-08-25",
+    schedule_count: 0,
+  });
+  assert(parsedInvalid.success === false, "CASE PLAN1C-2: Non-positive schedule_count rejected by schema");
+
+  // CASE PLAN1C-3 & 4: executeAutoSchedule receives schedule_count and maps to p_session_count
+  mockScheduleRpcState = {
+    data: {
+      success: true,
+      status: "FULL",
+      scheduled_count: 3,
+      requested_count: 3,
+      appointment_ids: ["a1", "a2", "a3"],
+    },
+    error: null,
+  };
+  const res1C3 = simulateExecuteAutoSchedule({
+    treatment_course_id: "course-tt01-1",
+    doctor_id: "doc-tt01-active",
+    start_date: "2026-08-25",
+    schedule_count: 3,
+  });
+  assert(res1C3.success === true, "CASE PLAN1C-3: executeAutoSchedule with schedule_count succeeds");
+  assert(res1C3.scheduled_count === 3, "CASE PLAN1C-3: 3 scheduled");
+
+  // CASE PLAN1C-9: PLAN_NOT_ESTABLISHED maps to safe localized message
+  mockScheduleRpcState = {
+    data: { success: false, status: "FAILED", error_code: "PLAN_NOT_ESTABLISHED" },
+    error: null,
+  };
+  const res1C9 = simulateExecuteAutoSchedule({
+    treatment_course_id: "course-tt01-1",
+    doctor_id: "doc-tt01-active",
+    start_date: "2026-08-25",
+    schedule_count: 2,
+  });
+  assert(res1C9.success === false, "CASE PLAN1C-9: PLAN_NOT_ESTABLISHED returns failure");
+  assert(res1C9.message === "Bác sĩ chưa thiết lập kế hoạch điều trị cho liệu trình này.", "CASE PLAN1C-9: Localized message for PLAN_NOT_ESTABLISHED");
+
+  // CASE PLAN1C-10: EXCEEDS_PLAN_CAPACITY maps to safe localized message
+  mockScheduleRpcState = {
+    data: { success: false, status: "FAILED", error_code: "EXCEEDS_PLAN_CAPACITY" },
+    error: null,
+  };
+  const res1C10 = simulateExecuteAutoSchedule({
+    treatment_course_id: "course-tt01-1",
+    doctor_id: "doc-tt01-active",
+    start_date: "2026-08-25",
+    schedule_count: 5,
+  });
+  assert(res1C10.success === false, "CASE PLAN1C-10: EXCEEDS_PLAN_CAPACITY returns failure");
+  assert(res1C10.message === "Số lịch muốn xếp vượt quá số buổi còn lại trong kế hoạch điều trị.", "CASE PLAN1C-10: Localized message for EXCEEDS_PLAN_CAPACITY");
+
+  // CASE PLAN1C-11: INVALID_SCHEDULE_COUNT maps to safe localized message
+  mockScheduleRpcState = {
+    data: { success: false, status: "FAILED", error_code: "INVALID_SCHEDULE_COUNT" },
+    error: null,
+  };
+  const res1C11 = simulateExecuteAutoSchedule({
+    treatment_course_id: "course-tt01-1",
+    doctor_id: "doc-tt01-active",
+    start_date: "2026-08-25",
+    schedule_count: 1,
+  });
+  assert(res1C11.success === false, "CASE PLAN1C-11: INVALID_SCHEDULE_COUNT returns failure");
+  assert(res1C11.message === "Số lịch muốn xếp phải lớn hơn 0.", "CASE PLAN1C-11: Localized message for INVALID_SCHEDULE_COUNT");
+
+  // 15. SCHED-PLAN1C-FIX1 REMAINING CAPACITY ZERO-STATE & PLAN GUARDS
+  interface MockModalState {
+    plannedSessionCount?: number | null;
+    remainingSchedulableSlots?: number | null;
+  }
+
+  function simulateModalState(props: MockModalState) {
+    const isPlanUnestablished =
+      props.plannedSessionCount !== undefined &&
+      (props.plannedSessionCount === null || props.plannedSessionCount <= 0);
+
+    const isZeroRemaining =
+      props.remainingSchedulableSlots !== undefined &&
+      props.remainingSchedulableSlots !== null &&
+      props.remainingSchedulableSlots <= 0;
+
+    const isSchedulingDisabled = isPlanUnestablished || isZeroRemaining;
+
+    const defaultScheduleCount =
+      props.remainingSchedulableSlots !== undefined && props.remainingSchedulableSlots !== null
+        ? Math.max(0, props.remainingSchedulableSlots)
+        : 1;
+
+    let displayMessage: string | null = null;
+    if (isPlanUnestablished) {
+      displayMessage = "Bác sĩ chưa thiết lập kế hoạch điều trị cho liệu trình này.";
+    } else if (isZeroRemaining) {
+      displayMessage = "Liệu trình đã được xếp đủ số buổi theo kế hoạch điều trị.";
+    }
+
+    return {
+      isPlanUnestablished,
+      isZeroRemaining,
+      isSchedulingDisabled,
+      defaultScheduleCount,
+      displayMessage,
+    };
+  }
+
+  // CASE PLAN1C-FIX1-1: remaining = 5 -> default = 5, enabled
+  const m1 = simulateModalState({ plannedSessionCount: 10, remainingSchedulableSlots: 5 });
+  assert(m1.defaultScheduleCount === 5, "CASE PLAN1C-FIX1-1: Default is 5");
+  assert(m1.isSchedulingDisabled === false, "CASE PLAN1C-FIX1-1: Form is enabled");
+  assert(m1.displayMessage === null, "CASE PLAN1C-FIX1-1: No warning message");
+
+  // CASE PLAN1C-FIX1-2: remaining = 0 -> default is 0 (NOT 1), disabled
+  const m2 = simulateModalState({ plannedSessionCount: 10, remainingSchedulableSlots: 0 });
+  assert(m2.defaultScheduleCount === 0, "CASE PLAN1C-FIX1-2: Default is 0 (NOT converted to 1)");
+  assert(m2.isZeroRemaining === true, "CASE PLAN1C-FIX1-2: isZeroRemaining is true");
+  assert(m2.isSchedulingDisabled === true, "CASE PLAN1C-FIX1-2: Form submission is disabled");
+  assert(m2.displayMessage === "Liệu trình đã được xếp đủ số buổi theo kế hoạch điều trị.", "CASE PLAN1C-FIX1-2: Shows zero remaining message");
+
+  // CASE PLAN1C-FIX1-3: remaining unknown -> neutral default 1 permitted
+  const m3 = simulateModalState({ plannedSessionCount: 10, remainingSchedulableSlots: undefined });
+  assert(m3.defaultScheduleCount === 1, "CASE PLAN1C-FIX1-3: Neutral default is 1 when remaining unknown");
+  assert(m3.isSchedulingDisabled === false, "CASE PLAN1C-FIX1-3: Enabled when remaining unknown");
+
+  // CASE PLAN1C-FIX1-4: plannedSessionCount = null -> disabled, unestablished message
+  const m4 = simulateModalState({ plannedSessionCount: null, remainingSchedulableSlots: 0 });
+  assert(m4.isPlanUnestablished === true, "CASE PLAN1C-FIX1-4: isPlanUnestablished is true");
+  assert(m4.isSchedulingDisabled === true, "CASE PLAN1C-FIX1-4: Form submission is disabled");
+  assert(m4.displayMessage === "Bác sĩ chưa thiết lập kế hoạch điều trị cho liệu trình này.", "CASE PLAN1C-FIX1-4: Shows unestablished message");
+
+  // CASE PLAN1C-FIX1-5: plannedSessionCount <= 0 -> disabled
+  const m5 = simulateModalState({ plannedSessionCount: 0 });
+  assert(m5.isPlanUnestablished === true, "CASE PLAN1C-FIX1-5: isPlanUnestablished is true for plan=0");
+  assert(m5.isSchedulingDisabled === true, "CASE PLAN1C-FIX1-5: Form submission is disabled for plan=0");
+
   console.log("All Scheduling & Slots Unit Tests PASSED!");
 }
+
+
 

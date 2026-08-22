@@ -77,3 +77,31 @@ export const updateClinicRolesSchema = z.object({
 });
 
 export type UpdateClinicRolesInput = z.infer<typeof updateClinicRolesSchema>;
+
+export const provisionStaffAuthSchema = z.object({
+  staff_id: uuidSchema,
+  login_email: z.preprocess(
+    (val) => (typeof val === "string" ? val.trim().toLowerCase() : val),
+    z.string().min(1, "Vui lòng nhập email đăng nhập.").email("Định dạng email không hợp lệ.")
+  ),
+});
+
+export type ProvisionStaffAuthInput = z.input<typeof provisionStaffAuthSchema>;
+export type ProvisionStaffAuthParsed = z.output<typeof provisionStaffAuthSchema>;
+
+export const setupStaffPasswordSchema = z
+  .object({
+    password: z
+      .string()
+      .min(6, "Mật khẩu phải có ít nhất 6 ký tự.")
+      .max(100, "Mật khẩu không được vượt quá 100 ký tự."),
+    confirm_password: z.string().min(1, "Vui lòng xác nhận mật khẩu."),
+  })
+  .refine((data) => data.password === data.confirm_password, {
+    message: "Mật khẩu xác nhận không khớp.",
+    path: ["confirm_password"],
+  });
+
+export type SetupStaffPasswordInput = z.infer<typeof setupStaffPasswordSchema>;
+
+

@@ -98,7 +98,7 @@ export async function processReceptionIntake(
         reception_id: typedReception.id,
         primary_doctor_id: validated.doctor_id || null,
         start_date: validated.start_date,
-        planned_session_count: validated.planned_session_count,
+        planned_session_count: null,
         diagnoses: [],
         service_orders: [],
       },

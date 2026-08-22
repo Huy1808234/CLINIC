@@ -41,7 +41,6 @@ export const ReceptionClientView: React.FC<ReceptionClientViewProps> = ({
   const [birthYear, setBirthYear] = useState<string>("");
   const [address, setAddress] = useState<string>("");
   const [doctorId, setDoctorId] = useState<string>(catalogs.doctors[0]?.id || "");
-  const [sessionCount, setSessionCount] = useState<number>(7);
   const [reasonForVisit, setReasonForVisit] = useState<string>("");
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -83,7 +82,6 @@ export const ReceptionClientView: React.FC<ReceptionClientViewProps> = ({
         reason_for_visit: reasonForVisit || null,
         create_course: true,
         doctor_id: doctorId && doctorId !== "" ? doctorId : null,
-        planned_session_count: sessionCount,
       });
 
       if (!res.success) {
@@ -269,33 +267,22 @@ export const ReceptionClientView: React.FC<ReceptionClientViewProps> = ({
             onChange={(e) => setAddress(e.target.value)}
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-                Bác Sĩ Khám Ban Đầu
-              </label>
-              <select
-                value={doctorId}
-                onChange={(e) => setDoctorId(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-              >
-                <option value="">-- Chưa chỉ định bác sĩ --</option>
-                {catalogs.doctors.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.full_name} ({d.staff_code})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <Input
-              label="Số Buổi Điều Trị (Liệu Trình)"
-              type="number"
-              min={1}
-              max={30}
-              value={sessionCount}
-              onChange={(e) => setSessionCount(parseInt(e.target.value, 10) || 7)}
-            />
+          <div className="pt-2 border-t border-slate-100">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
+              Bác Sĩ Khám Ban Đầu
+            </label>
+            <select
+              value={doctorId}
+              onChange={(e) => setDoctorId(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+            >
+              <option value="">-- Chưa chỉ định bác sĩ --</option>
+              {catalogs.doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name} ({d.staff_code})
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

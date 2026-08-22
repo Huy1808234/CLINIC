@@ -159,7 +159,8 @@ export async function rescheduleAppointmentAction(input: RescheduleAppointmentIn
     }
 
     // 5. Privileged rescheduling execution
-    const result = await rescheduleAppointment(supabase, validated);
+    const user = await requireAuthenticatedUser();
+    const result = await rescheduleAppointment(supabase, validated, user.id);
     revalidatePath("/schedule");
     return { success: true, data: result };
   } catch (error: unknown) {

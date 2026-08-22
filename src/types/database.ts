@@ -226,6 +226,8 @@ export interface Database {
           phone: string | null;
           email: string | null;
           is_active: boolean;
+          auth_setup_required: boolean;
+          auth_setup_completed_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -237,6 +239,8 @@ export interface Database {
           phone?: string | null;
           email?: string | null;
           is_active?: boolean;
+          auth_setup_required?: boolean;
+          auth_setup_completed_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -248,6 +252,8 @@ export interface Database {
           phone?: string | null;
           email?: string | null;
           is_active?: boolean;
+          auth_setup_required?: boolean;
+          auth_setup_completed_at?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -314,7 +320,9 @@ export interface Database {
           start_date: string;
           planned_end_date: string | null;
           actual_end_date: string | null;
-          planned_session_count: number;
+          planned_session_count: number | null;
+          planned_by_doctor_id: string | null;
+          planned_at: string | null;
           completed_session_count: number;
           status: CourseStatus;
           adherence_status: CourseAdherenceStatus;
@@ -332,7 +340,9 @@ export interface Database {
           start_date: string;
           planned_end_date?: string | null;
           actual_end_date?: string | null;
-          planned_session_count?: number;
+          planned_session_count?: number | null;
+          planned_by_doctor_id?: string | null;
+          planned_at?: string | null;
           completed_session_count?: number;
           status?: CourseStatus;
           adherence_status?: CourseAdherenceStatus;
@@ -350,7 +360,9 @@ export interface Database {
           start_date?: string;
           planned_end_date?: string | null;
           actual_end_date?: string | null;
-          planned_session_count?: number;
+          planned_session_count?: number | null;
+          planned_by_doctor_id?: string | null;
+          planned_at?: string | null;
           completed_session_count?: number;
           status?: CourseStatus;
           adherence_status?: CourseAdherenceStatus;
@@ -1203,6 +1215,33 @@ export interface Database {
           p_actor_staff_id: string;
           p_actor_user_id: string;
           p_clinical_note?: string | null;
+        };
+        Returns: Json;
+      };
+      establish_treatment_course_plan: {
+        Args: {
+          p_course_id: string;
+          p_clinic_id: string;
+          p_planned_session_count: number;
+          p_actor_staff_id: string;
+          p_actor_user_id: string;
+        };
+        Returns: Json;
+      };
+      complete_staff_auth_setup: {
+        Args: {
+          p_actor_user_id: string;
+        };
+        Returns: Json;
+      };
+      link_staff_auth_account: {
+        Args: {
+          p_staff_id: string;
+          p_clinic_id: string;
+          p_auth_user_id: string;
+          p_login_email: string;
+          p_actor_staff_id: string;
+          p_actor_user_id: string;
         };
         Returns: Json;
       };

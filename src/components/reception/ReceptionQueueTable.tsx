@@ -103,7 +103,7 @@ export const ReceptionQueueTable: React.FC<ReceptionQueueTableProps> = ({
                       <div>
                         <Badge variant="default" size="sm">
                           LT{item.active_course.course_no} ({item.active_course.completed_session_count}/
-                          {item.active_course.planned_session_count})
+                          {item.active_course.planned_session_count ?? "—"})
                         </Badge>
                       </div>
                     ) : (

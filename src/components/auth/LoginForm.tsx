@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { signInAction } from "@/app/actions/auth-actions";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -103,12 +104,20 @@ export const LoginForm: React.FC = () => {
 
               {/* Password Field */}
               <div className="space-y-1">
-                <label
-                  htmlFor="login-password"
-                  className="block text-xs font-semibold uppercase tracking-wider text-slate-700"
-                >
-                  Mật Khẩu *
-                </label>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="login-password"
+                    className="block text-xs font-semibold uppercase tracking-wider text-slate-700"
+                  >
+                    Mật Khẩu *
+                  </label>
+                  <Link
+                    href="/auth/forgot-password"
+                    className="text-xs font-medium text-teal-700 hover:text-teal-900 hover:underline"
+                  >
+                    Quên mật khẩu?
+                  </Link>
+                </div>
                 <div className="relative">
                   <input
                     id="login-password"

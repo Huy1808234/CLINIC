@@ -28,3 +28,14 @@ export const recordCourseDiagnosisSchema = z
 
 export type RecordCourseDiagnosisInput = z.input<typeof recordCourseDiagnosisSchema>;
 export type RecordCourseDiagnosisParsed = z.output<typeof recordCourseDiagnosisSchema>;
+
+export const establishInitialTreatmentPlanSchema = z.object({
+  course_id: uuidSchema,
+  planned_session_count: z
+    .number()
+    .int("Số buổi phải là số nguyên")
+    .min(1, "Số buổi điều trị phải lớn hơn 0"),
+});
+
+export type EstablishInitialTreatmentPlanInput = z.input<typeof establishInitialTreatmentPlanSchema>;
+export type EstablishInitialTreatmentPlanParsed = z.output<typeof establishInitialTreatmentPlanSchema>;

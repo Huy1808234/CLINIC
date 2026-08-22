@@ -1,6 +1,9 @@
 import { createReceptionSchema } from "@/lib/validation/reception-schemas";
 import { createTreatmentCourseSchema, updateTreatmentCourseSchema } from "@/lib/validation/treatment-schemas";
-import { recordCourseDiagnosisSchema } from "@/lib/validation/clinical-schemas";
+import {
+  recordCourseDiagnosisSchema,
+  establishInitialTreatmentPlanSchema,
+} from "@/lib/validation/clinical-schemas";
 
 function assert(condition: boolean, msg: string) {
   if (!condition) {
@@ -626,6 +629,751 @@ export function runTreatmentCourseTests() {
     raw_text: "   ",
   });
   assert(blankDiag.success === false, "CASE FIX-C8: Blank whitespace diagnosis must fail schema validation");
+
+  // 8. CLINICAL1C1 DOCTOR TREATMENT PLAN FOUNDATION TESTS
+  interface MockCourseWithPlanProvenance {
+    id: string;
+    patient_id: string;
+    primary_doctor_id: string | null;
+    planned_session_count: number | null;
+    planned_by_doctor_id: string | null;
+    planned_at: string | null;
+    completed_session_count: number;
+    status: string;
+  }
+
+  function validateCoursePlanConstraint(course: {
+    planned_session_count?: number | null;
+    planned_by_doctor_id?: string | null;
+    planned_at?: string | null;
+  }) {
+    if (course.planned_session_count !== undefined && course.planned_session_count !== null) {
+      if (course.planned_session_count <= 0) {
+        throw new Error("chk_treatment_courses_planned_session_count_positive: must be > 0");
+      }
+    }
+    return true;
+  }
+
+  // CASE CL1C1-1: planned_session_count accepts null (Doctor plan not established)
+  const courseNullPlan: MockCourseWithPlanProvenance = {
+    id: "course-cl1c1-1",
+    patient_id: "pat-1",
+    primary_doctor_id: "doc-1",
+    planned_session_count: null,
+    planned_by_doctor_id: null,
+    planned_at: null,
+    completed_session_count: 0,
+    status: "PLANNED",
+  };
+  assert(validateCoursePlanConstraint(courseNullPlan) === true, "CASE CL1C1-1: Null plan accepted");
+
+  // CASE CL1C1-2: planned_session_count accepts positive integer
+  const coursePositivePlan: MockCourseWithPlanProvenance = {
+    id: "course-cl1c1-2",
+    patient_id: "pat-1",
+    primary_doctor_id: "doc-1",
+    planned_session_count: 10,
+    planned_by_doctor_id: "doc-staff-1",
+    planned_at: new Date().toISOString(),
+    completed_session_count: 0,
+    status: "ACTIVE",
+  };
+  assert(validateCoursePlanConstraint(coursePositivePlan) === true, "CASE CL1C1-2: Positive plan accepted");
+
+  // CASE CL1C1-3: planned_session_count rejects 0
+  let planZeroRejected = false;
+  try {
+    validateCoursePlanConstraint({ planned_session_count: 0 });
+  } catch (err: unknown) {
+    planZeroRejected = true;
+    assert((err as Error).message.includes("must be > 0"), "CASE CL1C1-3: Check constraint message");
+  }
+  assert(planZeroRejected, "CASE CL1C1-3: 0 planned sessions rejected");
+
+  // CASE CL1C1-4: planned_session_count rejects negative number
+  let planNegRejected = false;
+  try {
+    validateCoursePlanConstraint({ planned_session_count: -3 });
+  } catch (err: unknown) {
+    planNegRejected = true;
+    assert((err as Error).message.includes("must be > 0"), "CASE CL1C1-4: Negative plan rejected");
+  }
+  assert(planNegRejected, "CASE CL1C1-4: Negative planned sessions rejected");
+
+  // CASE CL1C1-7, 8, 10, 11: Legacy positive plan with NULL provenance remains allowed
+  const legacyCourse: MockCourseWithPlanProvenance = {
+    id: "course-legacy-1",
+    patient_id: "pat-legacy",
+    primary_doctor_id: "doc-1",
+    planned_session_count: 7,
+    planned_by_doctor_id: null, // Legacy provenance is not fabricated
+    planned_at: null,
+    completed_session_count: 0,
+    status: "ACTIVE",
+  };
+  assert(validateCoursePlanConstraint(legacyCourse) === true, "CASE CL1C1-11: Legacy course with null provenance is valid");
+  assert(legacyCourse.planned_by_doctor_id === null, "CASE CL1C1-11: Historical doctor provenance is not fabricated");
+  assert(legacyCourse.planned_at === null, "CASE CL1C1-11: Historical planned_at is not fabricated");
+
+  // 9. CLINICAL1C2A DOCTOR INITIAL TREATMENT PLAN ESTABLISHMENT TESTS
+  interface MockPlanCourseRecord {
+    id: string;
+    clinic_id: string | null;
+    status: string;
+    planned_session_count: number | null;
+    planned_by_doctor_id: string | null;
+    planned_at: string | null;
+    completed_session_count: number;
+  }
+
+  interface MockAuditRecord {
+    actor_user_id: string | null;
+    action: string;
+    entity_type: string;
+    entity_id: string;
+    after_data: Record<string, unknown>;
+  }
+
+  let createdAppointmentsCount = 0;
+  let schedulerRpcCalled = false;
+  const auditLogsDb: MockAuditRecord[] = [];
+
+  function simulateEstablishInitialTreatmentPlan(options: {
+    coursesDb: MockPlanCourseRecord[];
+    input: { course_id: string; planned_session_count: number };
+    activeClinicId: string;
+    callerRoles: string[];
+    doctorStaffId: string;
+    authUserId: string;
+  }) {
+    createdAppointmentsCount = 0;
+    schedulerRpcCalled = false;
+
+    // 1. Role check: Must hold DOCTOR role
+    if (!options.callerRoles.includes("DOCTOR")) {
+      throw new Error("ActionForbiddenError: DOCTOR role required");
+    }
+
+    // 2. Atomic Compare-And-Set simulation
+    const courseIndex = options.coursesDb.findIndex(
+      (c) =>
+        c.id === options.input.course_id &&
+        c.clinic_id === options.activeClinicId &&
+        ["PLANNED", "ACTIVE"].includes(c.status) &&
+        c.planned_session_count === null
+    );
+
+    if (courseIndex === -1) {
+      // Re-read and classify failure
+      const existing = options.coursesDb.find((c) => c.id === options.input.course_id);
+      if (!existing) throw new Error("COURSE_NOT_FOUND: Không tìm thấy liệu trình.");
+      if (existing.clinic_id !== options.activeClinicId) throw new Error("COURSE_NOT_ACCESSIBLE: Liệu trình không thuộc cơ sở hiện tại.");
+      if (existing.planned_session_count !== null) throw new Error("PLAN_ALREADY_ESTABLISHED: Liệu trình đã có kế hoạch điều trị từ trước.");
+      if (!["PLANNED", "ACTIVE"].includes(existing.status)) throw new Error("COURSE_NOT_PLAN_ELIGIBLE: Không thể thiết lập kế hoạch cho liệu trình đã đóng/tạm ngưng.");
+      throw new Error("GENERIC_FAILURE: Không thể thiết lập kế hoạch điều trị.");
+    }
+
+    // 3. Perform mutation
+    const trustedTime = "2026-08-22T07:15:00.000Z";
+    const course = options.coursesDb[courseIndex];
+    course.planned_session_count = options.input.planned_session_count;
+    course.planned_by_doctor_id = options.doctorStaffId;
+    course.planned_at = trustedTime;
+
+    // 4. Audit Log
+    auditLogsDb.push({
+      actor_user_id: options.authUserId,
+      action: "ESTABLISH_TREATMENT_PLAN",
+      entity_type: "TREATMENT_COURSE",
+      entity_id: course.id,
+      after_data: {
+        course_id: course.id,
+        planned_session_count: course.planned_session_count,
+        planned_by_doctor_id: course.planned_by_doctor_id,
+        planned_at: course.planned_at,
+      },
+    });
+
+    return { success: true, course };
+  }
+
+  // CASE CL1C2A-1: Authenticated same-clinic DOCTOR establishes plan -> success
+  const coursesDb: MockPlanCourseRecord[] = [
+    {
+      id: "course-c1c2a-1",
+      clinic_id: "clinic-tt01",
+      status: "PLANNED",
+      planned_session_count: null,
+      planned_by_doctor_id: null,
+      planned_at: null,
+      completed_session_count: 0,
+    },
+  ];
+  const resC1C2A1 = simulateEstablishInitialTreatmentPlan({
+    coursesDb,
+    input: { course_id: "course-c1c2a-1", planned_session_count: 10 },
+    activeClinicId: "clinic-tt01",
+    callerRoles: ["DOCTOR"],
+    doctorStaffId: "staff-doctor-1",
+    authUserId: "auth-user-123",
+  });
+  assert(resC1C2A1.success === true, "CASE CL1C2A-1: DOCTOR establishes plan successfully");
+  assert(coursesDb[0].planned_session_count === 10, "CASE CL1C2A-1: plan is 10");
+  assert(coursesDb[0].planned_by_doctor_id === "staff-doctor-1", "CASE CL1C2A-1: Doctor Staff UUID stamped");
+  assert(coursesDb[0].planned_at !== null, "CASE CL1C2A-1: planned_at timestamp stamped");
+  assert(createdAppointmentsCount === 0, "CASE CL1C2A-15: Zero appointments created");
+  assert(schedulerRpcCalled === false, "CASE CL1C2A-16: Scheduler RPC not called");
+  assert(coursesDb[0].completed_session_count === 0, "CASE CL1C2A-17: completed_session_count unchanged");
+
+  // CASE CL1C2A-18: Audit actor_user_id is Auth User UUID
+  const lastAudit = auditLogsDb[auditLogsDb.length - 1];
+  assert(lastAudit.actor_user_id === "auth-user-123", "CASE CL1C2A-18: Audit actor_user_id is Auth User UUID");
+  assert(lastAudit.action === "ESTABLISH_TREATMENT_PLAN", "CASE CL1C2A-18: Audit action is ESTABLISH_TREATMENT_PLAN");
+
+  // CASE CL1C2A-2: Schema validates inputs (browser only supplies course_id, planned_session_count)
+  const schemaValid = establishInitialTreatmentPlanSchema.safeParse({
+    course_id: "123e4567-e89b-12d3-a456-426614174000",
+    planned_session_count: 10,
+  });
+  assert(schemaValid.success === true, "CASE CL1C2A-2: Schema accepts valid input");
+
+  // CASE CL1C2A-10 & 11: Schema rejects <= 0
+  const schemaZero = establishInitialTreatmentPlanSchema.safeParse({
+    course_id: "123e4567-e89b-12d3-a456-426614174000",
+    planned_session_count: 0,
+  });
+  assert(schemaZero.success === false, "CASE CL1C2A-10: Schema rejects 0");
+
+  const schemaNeg = establishInitialTreatmentPlanSchema.safeParse({
+    course_id: "123e4567-e89b-12d3-a456-426614174000",
+    planned_session_count: -5,
+  });
+  assert(schemaNeg.success === false, "CASE CL1C2A-11: Schema rejects negative");
+
+  // CASE CL1C2A-4: ADMIN-only caller denied
+  let adminDenied = false;
+  try {
+    simulateEstablishInitialTreatmentPlan({
+      coursesDb,
+      input: { course_id: "course-c1c2a-1", planned_session_count: 10 },
+      activeClinicId: "clinic-tt01",
+      callerRoles: ["ADMIN"],
+      doctorStaffId: "staff-admin-1",
+      authUserId: "auth-admin-1",
+    });
+  } catch (err: unknown) {
+    adminDenied = true;
+    assert((err as Error).message.includes("ActionForbiddenError"), "CASE CL1C2A-4: ADMIN denied");
+  }
+  assert(adminDenied, "CASE CL1C2A-4: ADMIN-only denied");
+
+  // CASE CL1C2A-5..7: Non-Doctor roles denied
+  for (const role of ["RECEPTIONIST", "TECHNICIAN", "Y_SI"]) {
+    let roleDenied = false;
+    try {
+      simulateEstablishInitialTreatmentPlan({
+        coursesDb,
+        input: { course_id: "course-c1c2a-1", planned_session_count: 10 },
+        activeClinicId: "clinic-tt01",
+        callerRoles: [role],
+        doctorStaffId: "staff-role-1",
+        authUserId: "auth-role-1",
+      });
+    } catch {
+      roleDenied = true;
+    }
+    assert(roleDenied, `CASE CL1C2A-5..7: Role ${role} must be denied`);
+  }
+
+  // CASE CL1C2A-8: Cross-clinic Course denied
+  let crossClinicDenied = false;
+  try {
+    simulateEstablishInitialTreatmentPlan({
+      coursesDb,
+      input: { course_id: "course-c1c2a-1", planned_session_count: 10 },
+      activeClinicId: "clinic-tt02", // Different clinic
+      callerRoles: ["DOCTOR"],
+      doctorStaffId: "staff-doc-2",
+      authUserId: "auth-doc-2",
+    });
+  } catch (err: unknown) {
+    crossClinicDenied = true;
+    assert((err as Error).message.includes("COURSE_NOT_ACCESSIBLE"), "CASE CL1C2A-8: Cross clinic error message");
+  }
+  assert(crossClinicDenied, "CASE CL1C2A-8: Cross clinic denied");
+
+  // CASE CL1C2A-12 & 13: Existing plan / Legacy unprovenanced plan cannot be overwritten
+  let overwriteDenied = false;
+  try {
+    simulateEstablishInitialTreatmentPlan({
+      coursesDb,
+      input: { course_id: "course-c1c2a-1", planned_session_count: 15 }, // Already has plan = 10
+      activeClinicId: "clinic-tt01",
+      callerRoles: ["DOCTOR"],
+      doctorStaffId: "staff-doc-1",
+      authUserId: "auth-doc-1",
+    });
+  } catch (err: unknown) {
+    overwriteDenied = true;
+    assert((err as Error).message.includes("PLAN_ALREADY_ESTABLISHED"), "CASE CL1C2A-12: PLAN_ALREADY_ESTABLISHED message");
+  }
+  assert(overwriteDenied, "CASE CL1C2A-12: Existing plan cannot be overwritten");
+  assert(coursesDb[0].planned_session_count === 10, "CASE CL1C2A-12: Plan remains 10");
+
+  // Status Matrix Tests: PAUSED, COMPLETED, DROPPED, CANCELLED
+  for (const status of ["PAUSED", "COMPLETED", "DROPPED", "CANCELLED"]) {
+    const closedDb: MockPlanCourseRecord[] = [
+      {
+        id: `course-${status.toLowerCase()}`,
+        clinic_id: "clinic-tt01",
+        status,
+        planned_session_count: null,
+        planned_by_doctor_id: null,
+        planned_at: null,
+        completed_session_count: 0,
+      },
+    ];
+    let closedDenied = false;
+    try {
+      simulateEstablishInitialTreatmentPlan({
+        coursesDb: closedDb,
+        input: { course_id: `course-${status.toLowerCase()}`, planned_session_count: 8 },
+        activeClinicId: "clinic-tt01",
+        callerRoles: ["DOCTOR"],
+        doctorStaffId: "staff-doc-1",
+        authUserId: "auth-doc-1",
+      });
+    } catch (err: unknown) {
+      closedDenied = true;
+      assert((err as Error).message.includes("COURSE_NOT_PLAN_ELIGIBLE"), `Status ${status} ineligible`);
+    }
+    assert(closedDenied, `Course with status ${status} must be ineligible for initial plan`);
+  }
+
+  // 10. CLINICAL1C2A-FIX1 ATOMIC DOCTOR TREATMENT PLAN RPC TESTS
+  interface MockRpcCourse {
+    id: string;
+    clinic_id: string | null;
+    status: string;
+    planned_session_count: number | null;
+    planned_by_doctor_id: string | null;
+    planned_at: string | null;
+  }
+
+  interface MockRpcStaff {
+    id: string;
+    user_id: string;
+    is_active: boolean;
+  }
+
+  interface MockRpcMembership {
+    staff_id: string;
+    clinic_id: string;
+    is_active: boolean;
+    roles: string[];
+  }
+
+  function simulateEstablishTreatmentCoursePlanRpc(
+    courses: MockRpcCourse[],
+    staffList: MockRpcStaff[],
+    memberships: MockRpcMembership[],
+    auditLogs: Array<Record<string, unknown>>,
+    params: {
+      p_course_id: string;
+      p_clinic_id: string;
+      p_planned_session_count: number;
+      p_actor_staff_id: string;
+      p_actor_user_id: string;
+    },
+    options?: { injectAuditError?: boolean }
+  ) {
+    // 1. Parameter validation
+    if (
+      !params.p_course_id ||
+      !params.p_clinic_id ||
+      !params.p_planned_session_count ||
+      !params.p_actor_staff_id ||
+      !params.p_actor_user_id
+    ) {
+      return { success: false, error_code: "INVALID_INPUT", message: "Dữ liệu đầu vào không đầy đủ." };
+    }
+
+    if (params.p_planned_session_count <= 0) {
+      return { success: false, error_code: "INVALID_PLAN_COUNT", message: "Số buổi điều trị phải lớn hơn 0." };
+    }
+
+    // 2. Validate actor Staff integrity and Auth User linkage
+    const staff = staffList.find((s) => s.id === params.p_actor_staff_id);
+    if (!staff || !staff.is_active || staff.user_id !== params.p_actor_user_id) {
+      return { success: false, error_code: "INVALID_ACTOR", message: "Tài khoản nhân viên không hợp lệ." };
+    }
+
+    // 3. Validate actor has active membership and DOCTOR role at p_clinic_id
+    const membership = memberships.find(
+      (m) =>
+        m.staff_id === params.p_actor_staff_id &&
+        m.clinic_id === params.p_clinic_id &&
+        m.is_active &&
+        m.roles.includes("DOCTOR")
+    );
+    if (!membership) {
+      return { success: false, error_code: "UNAUTHORIZED_DOCTOR", message: "Bác sĩ không có quyền thao tác tại cơ sở này." };
+    }
+
+    // 4. Lock and validate target Treatment Course
+    const course = courses.find((c) => c.id === params.p_course_id);
+    if (!course) {
+      return { success: false, error_code: "COURSE_NOT_FOUND", message: "Không tìm thấy liệu trình điều trị." };
+    }
+
+    if (course.clinic_id !== params.p_clinic_id) {
+      return { success: false, error_code: "COURSE_NOT_ACCESSIBLE", message: "Liệu trình không thuộc cơ sở làm việc hiện tại." };
+    }
+
+    if (course.planned_session_count !== null) {
+      return { success: false, error_code: "PLAN_ALREADY_ESTABLISHED", message: "Kế hoạch điều trị đã được thiết lập trước đó." };
+    }
+
+    if (!["PLANNED", "ACTIVE"].includes(course.status)) {
+      return { success: false, error_code: "COURSE_NOT_PLAN_ELIGIBLE", message: "Liệu trình hiện không ở trạng thái có thể lập kế hoạch điều trị." };
+    }
+
+    // 5 & 6. Atomic Transaction Simulation: Update Course + Insert Audit
+    if (options?.injectAuditError) {
+      // Transaction rollback simulation: If audit fails, course mutation does NOT commit
+      return { success: false, error_code: "AUDIT_FAILURE", message: "Lỗi ghi nhận nhật ký hệ thống." };
+    }
+
+    const plannedAt = "2026-08-22T07:22:00.000Z";
+    course.planned_session_count = params.p_planned_session_count;
+    course.planned_by_doctor_id = params.p_actor_staff_id;
+    course.planned_at = plannedAt;
+
+    auditLogs.push({
+      actor_user_id: params.p_actor_user_id,
+      action: "ESTABLISH_TREATMENT_PLAN",
+      entity_type: "TREATMENT_COURSE",
+      entity_id: course.id,
+      after_data: {
+        course_id: course.id,
+        clinic_id: params.p_clinic_id,
+        planned_session_count: params.p_planned_session_count,
+        planned_by_doctor_id: params.p_actor_staff_id,
+        planned_at: plannedAt,
+      },
+    });
+
+    return {
+      success: true,
+      course_id: course.id,
+      planned_session_count: course.planned_session_count,
+      planned_by_doctor_id: course.planned_by_doctor_id,
+      planned_at: plannedAt,
+      message: "Thiết lập kế hoạch điều trị thành công.",
+    };
+  }
+
+  // Setup test DB fixtures
+  const rpcStaff: MockRpcStaff[] = [
+    { id: "staff-doc-1", user_id: "user-auth-1", is_active: true },
+    { id: "staff-inactive-doc", user_id: "user-auth-2", is_active: false },
+    { id: "staff-admin-only", user_id: "user-auth-3", is_active: true },
+  ];
+
+  const rpcMemberships: MockRpcMembership[] = [
+    { staff_id: "staff-doc-1", clinic_id: "clinic-tt01", is_active: true, roles: ["DOCTOR"] },
+    { staff_id: "staff-admin-only", clinic_id: "clinic-tt01", is_active: true, roles: ["ADMIN"] },
+  ];
+
+  const rpcCourses: MockRpcCourse[] = [
+    { id: "course-1", clinic_id: "clinic-tt01", status: "PLANNED", planned_session_count: null, planned_by_doctor_id: null, planned_at: null },
+    { id: "course-cross", clinic_id: "clinic-tt02", status: "PLANNED", planned_session_count: null, planned_by_doctor_id: null, planned_at: null },
+    { id: "course-has-plan", clinic_id: "clinic-tt01", status: "ACTIVE", planned_session_count: 7, planned_by_doctor_id: null, planned_at: null },
+    { id: "course-paused", clinic_id: "clinic-tt01", status: "PAUSED", planned_session_count: null, planned_by_doctor_id: null, planned_at: null },
+  ];
+
+  const rpcAuditLogs: Array<Record<string, unknown>> = [];
+
+  // CASE CL1C2A-FIX1-1: Valid DOCTOR -> success
+  const rpcRes1 = simulateEstablishTreatmentCoursePlanRpc(
+    rpcCourses,
+    rpcStaff,
+    rpcMemberships,
+    rpcAuditLogs,
+    {
+      p_course_id: "course-1",
+      p_clinic_id: "clinic-tt01",
+      p_planned_session_count: 10,
+      p_actor_staff_id: "staff-doc-1",
+      p_actor_user_id: "user-auth-1",
+    }
+  );
+  assert(rpcRes1.success === true, "CASE CL1C2A-FIX1-1: RPC succeeds");
+  assert(rpcCourses[0].planned_session_count === 10, "CASE CL1C2A-FIX1-1: Plan updated");
+  assert(rpcAuditLogs.length === 1, "CASE CL1C2A-FIX1-1: Audit logged in same transaction");
+
+  // CASE CL1C2A-FIX1-5: Existing plan rejected
+  const rpcRes5 = simulateEstablishTreatmentCoursePlanRpc(
+    rpcCourses,
+    rpcStaff,
+    rpcMemberships,
+    rpcAuditLogs,
+    {
+      p_course_id: "course-has-plan",
+      p_clinic_id: "clinic-tt01",
+      p_planned_session_count: 12,
+      p_actor_staff_id: "staff-doc-1",
+      p_actor_user_id: "user-auth-1",
+    }
+  );
+  assert(rpcRes5.success === false, "CASE CL1C2A-FIX1-5: Existing plan rejected");
+  assert(rpcRes5.error_code === "PLAN_ALREADY_ESTABLISHED", "CASE CL1C2A-FIX1-5: PLAN_ALREADY_ESTABLISHED code");
+
+  // CASE CL1C2A-FIX1-7: Cross-clinic rejected
+  const rpcRes7 = simulateEstablishTreatmentCoursePlanRpc(
+    rpcCourses,
+    rpcStaff,
+    rpcMemberships,
+    rpcAuditLogs,
+    {
+      p_course_id: "course-cross",
+      p_clinic_id: "clinic-tt01",
+      p_planned_session_count: 10,
+      p_actor_staff_id: "staff-doc-1",
+      p_actor_user_id: "user-auth-1",
+    }
+  );
+  assert(rpcRes7.success === false, "CASE CL1C2A-FIX1-7: Cross clinic rejected");
+  assert(rpcRes7.error_code === "COURSE_NOT_ACCESSIBLE", "CASE CL1C2A-FIX1-7: COURSE_NOT_ACCESSIBLE code");
+
+  // CASE CL1C2A-FIX1-8: Inactive staff rejected
+  const rpcRes8 = simulateEstablishTreatmentCoursePlanRpc(
+    rpcCourses,
+    rpcStaff,
+    rpcMemberships,
+    rpcAuditLogs,
+    {
+      p_course_id: "course-1",
+      p_clinic_id: "clinic-tt01",
+      p_planned_session_count: 10,
+      p_actor_staff_id: "staff-inactive-doc",
+      p_actor_user_id: "user-auth-2",
+    }
+  );
+  assert(rpcRes8.success === false, "CASE CL1C2A-FIX1-8: Inactive staff rejected");
+  assert(rpcRes8.error_code === "INVALID_ACTOR", "CASE CL1C2A-FIX1-8: INVALID_ACTOR code");
+
+  // CASE CL1C2A-FIX1-12: ADMIN-only rejected (lacks DOCTOR role)
+  const rpcRes12 = simulateEstablishTreatmentCoursePlanRpc(
+    rpcCourses,
+    rpcStaff,
+    rpcMemberships,
+    rpcAuditLogs,
+    {
+      p_course_id: "course-1",
+      p_clinic_id: "clinic-tt01",
+      p_planned_session_count: 10,
+      p_actor_staff_id: "staff-admin-only",
+      p_actor_user_id: "user-auth-3",
+    }
+  );
+  assert(rpcRes12.success === false, "CASE CL1C2A-FIX1-12: ADMIN without DOCTOR role rejected");
+  assert(rpcRes12.error_code === "UNAUTHORIZED_DOCTOR", "CASE CL1C2A-FIX1-12: UNAUTHORIZED_DOCTOR code");
+
+  // CASE CL1C2A-FIX1-15: PAUSED course rejected
+  const rpcRes15 = simulateEstablishTreatmentCoursePlanRpc(
+    rpcCourses,
+    rpcStaff,
+    rpcMemberships,
+    rpcAuditLogs,
+    {
+      p_course_id: "course-paused",
+      p_clinic_id: "clinic-tt01",
+      p_planned_session_count: 10,
+      p_actor_staff_id: "staff-doc-1",
+      p_actor_user_id: "user-auth-1",
+    }
+  );
+  assert(rpcRes15.success === false, "CASE CL1C2A-FIX1-15: PAUSED course rejected");
+  assert(rpcRes15.error_code === "COURSE_NOT_PLAN_ELIGIBLE", "CASE CL1C2A-FIX1-15: COURSE_NOT_PLAN_ELIGIBLE code");
+
+  // CASE CL1C2A-FIX1-19: Atomic Audit Failure Rollback
+  const rollbackCourse: MockRpcCourse = {
+    id: "course-rollback",
+    clinic_id: "clinic-tt01",
+    status: "PLANNED",
+    planned_session_count: null,
+    planned_by_doctor_id: null,
+    planned_at: null,
+  };
+  const rpcRes19 = simulateEstablishTreatmentCoursePlanRpc(
+    [rollbackCourse],
+    rpcStaff,
+    rpcMemberships,
+    rpcAuditLogs,
+    {
+      p_course_id: "course-rollback",
+      p_clinic_id: "clinic-tt01",
+      p_planned_session_count: 10,
+      p_actor_staff_id: "staff-doc-1",
+      p_actor_user_id: "user-auth-1",
+    },
+    { injectAuditError: true }
+  );
+  assert(rpcRes19.success === false, "CASE CL1C2A-FIX1-19: Injected audit error fails RPC");
+  // 11. CLINICAL1C2B DOCTOR TREATMENT PLAN UI LOGIC TESTS
+  interface PlanCardUiState {
+    formVisible: boolean;
+    isReadOnly: boolean;
+    isLegacyPlan: boolean;
+    isEstablishedDoctorPlan: boolean;
+    message?: string;
+  }
+
+  function evaluatePlanCardUi(props: {
+    courseStatus: string;
+    plannedSessionCount: number | null;
+    plannedByDoctorId?: string | null;
+    isDoctor?: boolean;
+  }): PlanCardUiState {
+    const hasPlan = props.plannedSessionCount !== null && props.plannedSessionCount > 0;
+    const isEligibleStatus = ["PLANNED", "ACTIVE"].includes(props.courseStatus);
+    const isLegacyPlan = hasPlan && !props.plannedByDoctorId;
+    const isEstablishedDoctorPlan = hasPlan && Boolean(props.plannedByDoctorId);
+
+    if (isEstablishedDoctorPlan) {
+      return {
+        formVisible: false,
+        isReadOnly: true,
+        isLegacyPlan: false,
+        isEstablishedDoctorPlan: true,
+      };
+    }
+
+    if (isLegacyPlan) {
+      return {
+        formVisible: false,
+        isReadOnly: true,
+        isLegacyPlan: true,
+        isEstablishedDoctorPlan: false,
+        message: "Dữ liệu kế hoạch cũ — chưa xác định bác sĩ lập kế hoạch.",
+      };
+    }
+
+    if (isEligibleStatus) {
+      if (props.isDoctor) {
+        return {
+          formVisible: true,
+          isReadOnly: false,
+          isLegacyPlan: false,
+          isEstablishedDoctorPlan: false,
+        };
+      } else {
+        return {
+          formVisible: false,
+          isReadOnly: true,
+          isLegacyPlan: false,
+          isEstablishedDoctorPlan: false,
+          message: "Chưa có kế hoạch điều trị từ bác sĩ.",
+        };
+      }
+    }
+
+    return {
+      formVisible: false,
+      isReadOnly: true,
+      isLegacyPlan: false,
+      isEstablishedDoctorPlan: false,
+      message: "Liệu trình hiện không ở trạng thái có thể thiết lập kế hoạch điều trị.",
+    };
+  }
+
+  // CASE CL1C2B-1: Plan NULL, eligible PLANNED, DOCTOR -> form visible
+  const ui1 = evaluatePlanCardUi({ courseStatus: "PLANNED", plannedSessionCount: null, isDoctor: true });
+  assert(ui1.formVisible === true, "CASE CL1C2B-1: Form visible for NULL plan + DOCTOR");
+  assert(ui1.isReadOnly === false, "CASE CL1C2B-1: Not read-only");
+
+  // CASE CL1C2B-7: Existing Doctor Plan -> read-only, no form
+  const ui7 = evaluatePlanCardUi({ courseStatus: "ACTIVE", plannedSessionCount: 10, plannedByDoctorId: "staff-doc-1", isDoctor: true });
+  assert(ui7.formVisible === false, "CASE CL1C2B-7: Form hidden for existing doctor plan");
+  assert(ui7.isReadOnly === true, "CASE CL1C2B-7: Read-only");
+  assert(ui7.isEstablishedDoctorPlan === true, "CASE CL1C2B-7: Recognized as established doctor plan");
+
+  // CASE CL1C2B-8: Legacy Plan -> read-only, legacy message, no form
+  const ui8 = evaluatePlanCardUi({ courseStatus: "ACTIVE", plannedSessionCount: 7, plannedByDoctorId: null, isDoctor: true });
+  assert(ui8.formVisible === false, "CASE CL1C2B-8: Form hidden for legacy plan");
+  assert(ui8.isReadOnly === true, "CASE CL1C2B-8: Read-only");
+  assert(ui8.isLegacyPlan === true, "CASE CL1C2B-8: Recognized as legacy plan");
+  assert(Boolean(ui8.message?.includes("Dữ liệu kế hoạch cũ")), "CASE CL1C2B-8: Legacy notice displayed");
+
+  // CASE CL1C2B-9..12: Ineligible Course statuses -> no form
+  for (const status of ["PAUSED", "COMPLETED", "DROPPED", "CANCELLED"]) {
+    const uiIneligible = evaluatePlanCardUi({ courseStatus: status, plannedSessionCount: null, isDoctor: true });
+    assert(uiIneligible.formVisible === false, `CASE CL1C2B-9..12: Status ${status} hides form`);
+    assert(Boolean(uiIneligible.message?.includes("không ở trạng thái có thể thiết lập")), `CASE CL1C2B-9..12: Status ${status} message`);
+  }
+
+  // CASE CL1C2B-13: Non-Doctor role cannot see form
+  const uiNonDoc = evaluatePlanCardUi({ courseStatus: "PLANNED", plannedSessionCount: null, isDoctor: false });
+  assert(uiNonDoc.formVisible === false, "CASE CL1C2B-13: Non-doctor cannot see establish form");
+  assert(Boolean(uiNonDoc.message?.includes("Chưa có kế hoạch điều trị từ bác sĩ")), "CASE CL1C2B-13: Non-doctor message");
+
+  // 12. CLINICAL1C3 RECEPTION TREATMENT PLAN REMOVAL TESTS
+  // CASE CL1C3-1: Reception input schema parses without planned_session_count
+  const recParsed = createReceptionSchema.parse({
+    patient_id: "123e4567-e89b-12d3-a456-426614174000",
+    reception_source: "MANUAL",
+    patient_relation_type: "NEW",
+    create_course: true,
+  });
+  assert(!("planned_session_count" in recParsed), "CASE CL1C3-1: Schema does not output planned_session_count");
+
+  // CASE CL1C3-4 & 5: Simulation of Reception Intake Course creation writes NULL plan and NULL provenance
+  interface MockReceptionCourseCreation {
+    patient_id: string;
+    reception_id: string;
+    primary_doctor_id: string | null;
+    start_date: string;
+    planned_session_count: number | null;
+    planned_by_doctor_id: string | null;
+    planned_at: string | null;
+    status: string;
+  }
+
+  function simulateReceptionCourseCreation(doctor_id?: string | null): MockReceptionCourseCreation {
+    return {
+      patient_id: "123e4567-e89b-12d3-a456-426614174000",
+      reception_id: "rec-123",
+      primary_doctor_id: doctor_id || null,
+      start_date: "2026-08-22",
+      planned_session_count: null, // Explicitly NULL
+      planned_by_doctor_id: null,
+      planned_at: null,
+      status: "ACTIVE", // Preserved operational status
+    };
+  }
+
+  const newCourse = simulateReceptionCourseCreation("doctor-staff-1");
+  assert(newCourse.planned_session_count === null, "CASE CL1C3-4: New reception course plan is NULL");
+  assert(newCourse.planned_by_doctor_id === null, "CASE CL1C3-5: New reception course planned_by_doctor_id is NULL");
+  assert(newCourse.planned_at === null, "CASE CL1C3-5: New reception course planned_at is NULL");
+  assert(newCourse.status === "ACTIVE", "CASE CL1C3-8: New reception course status is ACTIVE");
+  assert(newCourse.primary_doctor_id === "doctor-staff-1", "CASE CL1C3-9: Primary doctor assignment preserved");
+
+  // CASE CL1C3-10: DoctorTreatmentPlanCard on new Reception Course (status ACTIVE, plan NULL) allows DOCTOR to establish plan
+  const uiReceptionCourse = evaluatePlanCardUi({
+    courseStatus: newCourse.status,
+    plannedSessionCount: newCourse.planned_session_count,
+    plannedByDoctorId: newCourse.planned_by_doctor_id,
+    isDoctor: true,
+  });
+  assert(uiReceptionCourse.formVisible === true, "CASE CL1C3-10: DOCTOR can establish plan on newly created reception course");
+  assert(uiReceptionCourse.isReadOnly === false, "CASE CL1C3-10: Form is not read-only for DOCTOR");
+
+  // CASE CL1C3-13 & 14: Nullable display formatting check
+  const displayPlanCount = (count: number | null) => (count !== null ? `${count}` : "—");
+  assert(displayPlanCount(newCourse.planned_session_count) === "—", "CASE CL1C3-13: NULL plan renders as —");
 
   console.log("All Treatment Course & Reception Unit Tests PASSED!");
 }

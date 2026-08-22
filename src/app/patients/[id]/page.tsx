@@ -3,9 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { getPatientHistory } from "@/rsc-data/patients/get-patient-history";
+import { getApplicationAccessContext } from "@/lib/auth/application-access";
+import { getCurrentStaffRolesForClinic } from "@/lib/auth/role-resolver";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { DoctorTreatmentPlanCard } from "@/components/clinical/DoctorTreatmentPlanCard";
 
 interface PatientDetailsPageProps {
   params: Promise<{ id: string }>;
@@ -13,12 +16,19 @@ interface PatientDetailsPageProps {
 
 export default async function PatientDetailsPage({ params }: PatientDetailsPageProps) {
   const { id } = await params;
-  const history = await getPatientHistory(id);
+  const [history, accessContext] = await Promise.all([
+    getPatientHistory(id),
+    getApplicationAccessContext(),
+  ]);
 
   if (!history) {
     notFound();
   }
 
+  const roles = accessContext?.clinic.clinic_id
+    ? await getCurrentStaffRolesForClinic(accessContext.clinic.clinic_id)
+    : [];
+  const isDoctor = roles.includes("DOCTOR");
   const { patient, insurance_cards, measurements, treatment_courses, recent_appointments } = history;
   const currentInsurance = insurance_cards.find((i) => i.is_current) || insurance_cards[0];
   const latestMeasurement = measurements[0];
@@ -102,15 +112,26 @@ export default async function PatientDetailsPage({ params }: PatientDetailsPageP
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-teal-800">Liệu Trình LT{course.course_no}</CardTitle>
                       <Badge variant={course.status === "COMPLETED" ? "success" : "default"}>
-                        {course.status} ({course.completed_session_count}/{course.planned_session_count} buổi)
+                        {course.status} ({course.completed_session_count}/{course.planned_session_count ?? "—"} buổi)
                       </Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-3 text-xs">
+                  <CardContent className="space-y-4 text-xs">
                     <div>
                       <p className="text-slate-400">Bác sĩ phụ trách:</p>
                       <p className="font-semibold text-slate-800 mt-0.5">{course.doctor_name || "—"}</p>
                     </div>
+
+                    {/* Doctor Treatment Plan Section */}
+                    <DoctorTreatmentPlanCard
+                      courseId={course.id}
+                      courseStatus={course.status}
+                      plannedSessionCount={course.planned_session_count}
+                      plannedByDoctorId={course.planned_by_doctor_id}
+                      plannedByDoctorName={course.planned_by_doctor_name}
+                      plannedAt={course.planned_at}
+                      isDoctor={isDoctor}
+                    />
 
                     {course.diagnoses.length > 0 && (
                       <div>

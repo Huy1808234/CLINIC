@@ -129,6 +129,9 @@ export async function getStaffList(clinicIdFilter?: string): Promise<StaffWithCl
     // Combine into StaffWithClinicMemberships
     let result: StaffWithClinicMemberships[] = staffRows.map((s) => ({
       id: s.id,
+      user_id: s.user_id || null,
+      auth_setup_required: (s.auth_setup_required as boolean | undefined) ?? false,
+      auth_setup_completed_at: (s.auth_setup_completed_at as string | null | undefined) ?? null,
       staff_code: s.staff_code,
       full_name: s.full_name,
       phone: s.phone,

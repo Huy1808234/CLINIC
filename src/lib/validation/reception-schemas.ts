@@ -20,7 +20,6 @@ export const createReceptionSchema = z.object({
   create_course: z.boolean().optional().default(true),
   doctor_id: optionalUuid,
   start_date: z.string().optional().default(() => new Date().toISOString().slice(0, 10)),
-  planned_session_count: z.number().int().min(1).max(30).optional().default(7),
   diagnoses: z
     .array(
       z.object({

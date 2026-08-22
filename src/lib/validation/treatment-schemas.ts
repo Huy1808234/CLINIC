@@ -9,7 +9,7 @@ export const createTreatmentCourseSchema = z.object({
   reception_id: optionalUuid,
   primary_doctor_id: optionalUuid,
   start_date: z.string().default(() => new Date().toISOString().slice(0, 10)),
-  planned_session_count: z.number().int().min(1).max(30).default(7),
+  planned_session_count: z.number().int().min(1).nullable().optional().default(null),
   notes: z.string().optional().nullable(),
   diagnoses: z.array(
     z.object({

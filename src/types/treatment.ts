@@ -11,7 +11,9 @@ export interface TreatmentCourse {
   start_date: string;
   planned_end_date: string | null;
   actual_end_date: string | null;
-  planned_session_count: number;
+  planned_session_count: number | null;
+  planned_by_doctor_id: string | null;
+  planned_at: string | null;
   completed_session_count: number;
   status: CourseStatus;
   adherence_status: CourseAdherenceStatus;
@@ -50,6 +52,7 @@ export interface CourseServiceOrder {
 export interface TreatmentCourseDetail extends TreatmentCourse {
   patient: Patient;
   doctor_name: string | null;
+  planned_by_doctor_name?: string | null;
   diagnoses: CourseDiagnosis[];
   service_orders: CourseServiceOrder[];
   tags: { id: string; code: string; label: string; category: string; note: string | null }[];

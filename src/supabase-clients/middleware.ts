@@ -46,7 +46,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
-  const isPublicRoute = pathname === "/login";
+  const isPublicRoute = pathname === "/login" || pathname.startsWith("/auth/");
 
   if (!user && !isPublicRoute) {
     // Unauthenticated caller attempting to access private route -> relative redirect to /login

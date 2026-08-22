@@ -6,21 +6,40 @@ import {
   createStaffSchema,
   updateStaffSchema,
   assignClinicMembershipSchema,
+  provisionStaffAuthSchema,
   type CreateStaffInput,
   type UpdateStaffInput,
   type AssignClinicMembershipInput,
+  type ProvisionStaffAuthInput,
 } from "@/lib/validation/staff-schemas";
 import {
   requireTargetClinicRole,
+  requireActionAuthorization,
   ActionForbiddenError,
 } from "@/lib/auth/action-authorization";
 import { StaffClinicAccessDeniedError } from "@/lib/auth/role-resolver";
-import { AuthenticationRequiredError } from "@/lib/auth/auth-resolver";
+import {
+  AuthenticationRequiredError,
+  requireAuthenticatedUser,
+} from "@/lib/auth/auth-resolver";
 import {
   requireCurrentStaff,
   StaffNotLinkedError,
   StaffInactiveError,
 } from "@/lib/auth/staff-resolver";
+import {
+  provisionStaffAuthAccount,
+  StaffAlreadyLinkedError,
+  AuthEmailAlreadyExistsError,
+  TargetStaffNotFoundError,
+  TargetStaffInactiveError,
+  TargetStaffClinicAccessDeniedError,
+  UnauthorizedAdminError,
+  InvalidActorError,
+  StaffLinkFailedError,
+  ProvisionCompensationFailedError,
+} from "@/lib/staff/staff-auth-service";
+import { ZodError } from "zod";
 
 const uuidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -592,3 +611,127 @@ export async function deactivateMembershipAction(membershipId: string) {
     };
   }
 }
+
+/**
+ * Server Action: Provisions a Supabase Auth login account for an existing Staff member.
+ *
+ * Security & Governance:
+ * 1. Caller MUST hold ADMIN role at verified active clinic (`requireActionAuthorization({ requiredRoles: ["ADMIN"] })`).
+ * 2. Target Staff MUST belong to the SAME active clinic and currently have `user_id IS NULL`.
+ * 3. Supabase Auth user is created server-side via Supabase Admin API.
+ * 4. Linking to `staff.user_id` is atomic compare-and-set.
+ * 5. If linking fails, the newly created Auth user is compensating-deleted to prevent orphan accounts.
+ * 6. Audit log `PROVISION_STAFF_AUTH_ACCOUNT` is recorded.
+ */
+export async function provisionStaffAuthAccountAction(input: ProvisionStaffAuthInput) {
+  try {
+    // 1. Validate input schema
+    const validated = provisionStaffAuthSchema.parse(input);
+
+    // 2. Authorize caller: Caller MUST hold ADMIN role at active clinic
+    const authContext = await requireActionAuthorization({
+      requiredRoles: ["ADMIN"],
+    });
+    const activeClinicId = authContext.access.clinic.clinic_id;
+    const actorStaffId = authContext.access.staff.id;
+    const actorUser = await requireAuthenticatedUser();
+
+    // 3. Delegate to privileged staff auth service
+    const supabase = createAdminClient();
+    const result = await provisionStaffAuthAccount(
+      supabase,
+      validated,
+      activeClinicId,
+      actorStaffId,
+      actorUser.id
+    );
+
+    revalidatePath("/staff");
+    return { success: true, data: result };
+  } catch (error: unknown) {
+    if (error instanceof StaffAlreadyLinkedError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (error instanceof AuthEmailAlreadyExistsError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (error instanceof TargetStaffNotFoundError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (error instanceof TargetStaffInactiveError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (error instanceof TargetStaffClinicAccessDeniedError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (error instanceof UnauthorizedAdminError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (error instanceof InvalidActorError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (error instanceof ProvisionCompensationFailedError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (error instanceof StaffLinkFailedError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+    if (
+      error instanceof ActionForbiddenError ||
+      error instanceof StaffClinicAccessDeniedError
+    ) {
+      return {
+        success: false,
+        error: "Bạn không có quyền quản trị (ADMIN) tại cơ sở này để cấp tài khoản.",
+      };
+    }
+    if (
+      error instanceof AuthenticationRequiredError ||
+      error instanceof StaffNotLinkedError ||
+      error instanceof StaffInactiveError
+    ) {
+      return {
+        success: false,
+        error: "Yêu cầu đăng nhập tài khoản quản trị hợp lệ.",
+      };
+    }
+    if (error instanceof ZodError) {
+      return {
+        success: false,
+        error: error.issues[0]?.message || "Dữ liệu cấp tài khoản không hợp lệ.",
+      };
+    }
+    return {
+      success: false,
+      error: (error as Error).message || "Lỗi cấp tài khoản đăng nhập.",
+    };
+  }
+}
+

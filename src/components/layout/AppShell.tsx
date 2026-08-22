@@ -2,7 +2,7 @@ import React from "react";
 import { redirect } from "next/navigation";
 import { requireApplicationAccessContext } from "@/lib/auth/application-access";
 import { AuthenticationRequiredError } from "@/lib/auth/auth-resolver";
-import { StaffNotLinkedError, StaffInactiveError } from "@/lib/auth/staff-resolver";
+import { StaffNotLinkedError, StaffInactiveError, AccountSetupRequiredError } from "@/lib/auth/staff-resolver";
 import { NoActiveClinicSelectedError } from "@/lib/auth/clinic-context";
 import { StaffClinicAccessDeniedError } from "@/lib/auth/role-resolver";
 import { StaffNoActiveClinicError } from "@/lib/auth/clinic-resolver";
@@ -22,6 +22,7 @@ export interface AppShellProps {
  * (authenticated user + active staff + verified active clinic selection).
  *
  * Specific Error Handling:
+ * - Password setup required -> redirect to /auth/setup-password
  * - No active clinic / Clinic access denied / Zero active clinics -> redirect to /select-clinic
  * - Staff not linked -> renders AccessDeniedView(code="STAFF_NOT_LINKED") with Logout available
  * - Staff inactive -> renders AccessDeniedView(code="STAFF_INACTIVE") with Logout available
@@ -32,6 +33,10 @@ export async function AppShell({ title, subtitle, actions, children }: AppShellP
   try {
     await requireApplicationAccessContext();
   } catch (error: unknown) {
+    if (error instanceof AccountSetupRequiredError) {
+      redirect("/auth/setup-password");
+    }
+
     if (
       error instanceof NoActiveClinicSelectedError ||
       error instanceof StaffClinicAccessDeniedError ||

@@ -23,7 +23,7 @@ export interface ReceptionQueueItem extends ReceptionEncounter {
     id: string;
     course_no: number;
     doctor_name: string | null;
-    planned_session_count: number;
+    planned_session_count: number | null;
     completed_session_count: number;
     status: string;
   } | null;

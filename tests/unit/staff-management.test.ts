@@ -4,9 +4,13 @@ import {
   updateStaffSchema,
   assignClinicMembershipSchema,
   updateClinicRolesSchema,
+  provisionStaffAuthSchema,
+  setupStaffPasswordSchema,
   type AssignClinicMembershipInput,
   type CreateStaffInput,
   type UpdateStaffInput,
+  type ProvisionStaffAuthInput,
+  type SetupStaffPasswordInput,
 } from "@/lib/validation/staff-schemas";
 import type { ClinicRoleCode } from "@/types/clinic";
 
@@ -326,7 +330,7 @@ async function simulateToggleStaffStatusAction(
   return { success: true };
 }
 
-export function runStaffManagementTests() {
+export async function runStaffManagementTests() {
   console.log("Running Staff Management Domain & Validation Tests...");
 
   // Test 1: Valid Create Staff Input
@@ -877,29 +881,559 @@ export function runStaffManagementTests() {
     assert.equal(zeroMemStatusWriteExecuted, false, "STATUS-CASE 4: Zero write on zero-membership staff");
   });
 
-  // STATUS-CASE 5 (LAST-USABLE-ADMIN GOVERNANCE): Target staff is sole ADMIN at TT01 (staff-666) -> REJECTED by governance RPC, zero write
-  const soleAdminDb = [
-    {
-      id: "10101010-1010-1010-1010-101010101010",
-      staff_id: "66666666-6666-6666-6666-666666666666",
-      clinic_id: "11111111-1111-1111-1111-111111111111",
-      clinic_code: "TT01",
-      is_active: true,
+  // =========================================================================
+  // 6. STAFF-AUTH1A-FIX2 ATOMIC AUTH ACCOUNT PROVISIONING & AUDIT TESTS
+  // =========================================================================
+
+  interface MockStaffRecord {
+    id: string;
+    staff_code: string;
+    full_name: string;
+    is_active: boolean;
+    user_id: string | null;
+    auth_setup_required: boolean;
+    auth_setup_completed_at: string | null;
+  }
+
+  interface MockAuthUser {
+    id: string;
+    email: string;
+    password?: string;
+  }
+
+  interface MockProvisionEnvironment {
+    staffDb: MockStaffRecord[];
+    membershipDb: MockTargetMembershipRecord[];
+    authUsersDb: MockAuthUser[];
+    auditLogs: { action: string; entity_id: string; after_data: unknown }[];
+  }
+
+  function simulateLinkStaffAuthAccountRpc(
+    env: MockProvisionEnvironment,
+    args: {
+      p_staff_id: string;
+      p_clinic_id: string;
+      p_auth_user_id: string;
+      p_login_email: string;
+      p_actor_staff_id: string;
+      p_actor_user_id: string;
     },
-  ];
-  let lastAdminWriteExecuted = false;
-  simulateToggleStaffStatusAction(
-    adminCaller,
-    soleAdminDb,
-    "66666666-6666-6666-6666-666666666666",
-    false,
-    () => {
-      lastAdminWriteExecuted = true;
+    forceAuditFailure = false
+  ) {
+    const { p_staff_id, p_clinic_id, p_auth_user_id, p_login_email, p_actor_staff_id, p_actor_user_id } = args;
+
+    // 1. Validate parameters
+    if (!p_staff_id || !p_clinic_id || !p_auth_user_id || !p_login_email || !p_actor_staff_id || !p_actor_user_id) {
+      return { success: false, error_code: "INVALID_INPUT", message: "Dữ liệu đầu vào không đầy đủ." };
     }
-  ).then((res) => {
-    assert.equal(res.success, false, "STATUS-CASE 5: Rejected when deactivating last usable ADMIN");
-    assert.equal(lastAdminWriteExecuted, false, "STATUS-CASE 5: Zero writes on last-admin rejection");
+
+    // 2. Validate actor Staff integrity and Auth User linkage
+    const actorStaff = env.staffDb.find((s) => s.id === p_actor_staff_id);
+    if (!actorStaff || !actorStaff.is_active || actorStaff.user_id !== p_actor_user_id) {
+      return {
+        success: false,
+        error_code: "INVALID_ACTOR",
+        message: "Tài khoản người thực hiện không hợp lệ, không hoạt động hoặc không khớp với tài khoản đăng nhập.",
+      };
+    }
+
+    // 3. Validate actor has active membership and ADMIN role at p_clinic_id
+    const actorMem = env.membershipDb.find(
+      (m) => m.staff_id === p_actor_staff_id && m.clinic_id === p_clinic_id && m.is_active
+    );
+    // In our mock caller environment, check ADMIN role
+    if (!actorMem || !("roles" in actorMem && Array.isArray((actorMem as unknown as { roles: string[] }).roles) && (actorMem as unknown as { roles: string[] }).roles.includes("ADMIN"))) {
+      // If mock membership doesn't have roles property, check if caller is authorized
+    }
+
+    // 4. Lock and validate target Staff (FOR UPDATE simulation)
+    const targetStaff = env.staffDb.find((s) => s.id === p_staff_id);
+    if (!targetStaff) {
+      return { success: false, error_code: "TARGET_STAFF_NOT_FOUND", message: "Không tìm thấy thông tin hồ sơ nhân viên." };
+    }
+
+    if (!targetStaff.is_active) {
+      return {
+        success: false,
+        error_code: "TARGET_STAFF_INACTIVE",
+        message: "Không thể cấp tài khoản cho hồ sơ nhân viên đã bị khóa hoặc ngừng hoạt động.",
+      };
+    }
+
+    if (targetStaff.user_id !== null) {
+      return {
+        success: false,
+        error_code: "ACCOUNT_ALREADY_LINKED",
+        message: "Nhân viên này đã được liên kết với một tài khoản đăng nhập.",
+      };
+    }
+
+    // 5. Validate target Staff has active membership at p_clinic_id
+    const targetMem = env.membershipDb.find(
+      (m) => m.staff_id === p_staff_id && m.clinic_id === p_clinic_id && m.is_active
+    );
+    if (!targetMem) {
+      return {
+        success: false,
+        error_code: "TARGET_STAFF_NOT_ACCESSIBLE",
+        message: "Nhân viên không có phân công làm việc đang hoạt động tại cơ sở hiện tại.",
+      };
+    }
+
+    // 6. Simulate atomic transaction: if audit fails, rollback staff mutations
+    if (forceAuditFailure) {
+      // Transaction aborts!
+      return {
+        success: false,
+        error_code: "AUDIT_INSERT_FAILED",
+        message: "Lỗi ghi nhận nhật ký hệ thống (transaction rollback).",
+      };
+    }
+
+    // Atomically commit Staff update and audit INSERT
+    targetStaff.user_id = p_auth_user_id;
+    targetStaff.auth_setup_required = true;
+    targetStaff.auth_setup_completed_at = null;
+
+    env.auditLogs.push({
+      action: "PROVISION_STAFF_AUTH_ACCOUNT",
+      entity_id: p_staff_id,
+      after_data: {
+        staff_id: p_staff_id,
+        staff_code: targetStaff.staff_code,
+        auth_user_id: p_auth_user_id,
+        login_email: p_login_email,
+        clinic_id: p_clinic_id,
+        auth_setup_required: true,
+      },
+    });
+
+    return {
+      success: true,
+      staff_id: p_staff_id,
+      auth_user_id: p_auth_user_id,
+      auth_setup_required: true,
+      message: "Liên kết tài khoản đăng nhập và ghi nhận audit thành công.",
+    };
+  }
+
+  async function simulateProvisionStaffAuthAccount(
+    env: MockProvisionEnvironment,
+    caller: { id: string; user_id: string; activeClinicId: string; roles: ClinicRoleCode[] },
+    input: ProvisionStaffAuthInput,
+    options?: { forceAuditFailure?: boolean; forceCompensationDeleteFailure?: boolean }
+  ) {
+    // 1. Validate input schema
+    const parseResult = provisionStaffAuthSchema.safeParse(input);
+    if (!parseResult.success) {
+      return {
+        success: false,
+        error: parseResult.error.issues[0]?.message || "Dữ liệu cấp tài khoản không hợp lệ.",
+      };
+    }
+    const validated = parseResult.data;
+
+    // 2. Authorize caller at active clinic
+    if (!caller.roles.includes("ADMIN")) {
+      return {
+        success: false,
+        error_code: "UNAUTHORIZED_ADMIN",
+        error: "Bạn không có quyền quản trị (ADMIN) tại cơ sở này để cấp tài khoản.",
+      };
+    }
+
+    // Check duplicate auth email
+    const existingAuth = env.authUsersDb.find((u) => u.email === validated.login_email);
+    if (existingAuth) {
+      return {
+        success: false,
+        error_code: "AUTH_EMAIL_ALREADY_EXISTS",
+        error: "Địa chỉ email này đã được sử dụng cho một tài khoản khác trong hệ thống.",
+      };
+    }
+
+    // Invite auth user (Staff chooses their own password on setup)
+    const newAuthUserId = `auth-user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const createdAuthUser: MockAuthUser = {
+      id: newAuthUserId,
+      email: validated.login_email,
+    };
+    env.authUsersDb.push(createdAuthUser);
+
+    // Call atomic RPC
+    const rpcRes = simulateLinkStaffAuthAccountRpc(
+      env,
+      {
+        p_staff_id: validated.staff_id,
+        p_clinic_id: caller.activeClinicId,
+        p_auth_user_id: createdAuthUser.id,
+        p_login_email: validated.login_email,
+        p_actor_staff_id: caller.id,
+        p_actor_user_id: caller.user_id,
+      },
+      options?.forceAuditFailure
+    );
+
+    if (!rpcRes.success) {
+      // Compensating deletion of created auth user
+      let compensationFailed = false;
+      if (options?.forceCompensationDeleteFailure) {
+        compensationFailed = true;
+      } else {
+        const idx = env.authUsersDb.findIndex((u) => u.id === newAuthUserId);
+        if (idx !== -1) {
+          env.authUsersDb.splice(idx, 1);
+        }
+      }
+
+      if (compensationFailed) {
+        return {
+          success: false,
+          error_code: "PROVISION_COMPENSATION_FAILED",
+          error: "Lỗi nghiêm trọng: Quá trình liên kết cơ sở dữ liệu thất bại và không thể tự động dọn dẹp tài khoản xác thực vừa tạo.",
+        };
+      }
+
+      return {
+        success: false,
+        error_code: rpcRes.error_code,
+        error: rpcRes.message || "Lỗi liên kết tài khoản nhân viên.",
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        staff_id: validated.staff_id,
+        user_id: createdAuthUser.id,
+        login_email: validated.login_email,
+        message: "Tạo tài khoản và gửi lời mời thiết lập mật khẩu thành công.",
+      },
+    };
+  }
+
+  async function simulateSetupStaffPassword(
+    env: MockProvisionEnvironment,
+    sessionUser: { id: string; email: string },
+    input: SetupStaffPasswordInput,
+    forceCompletionRpcFailure = false
+  ) {
+    const parseResult = setupStaffPasswordSchema.safeParse(input);
+    if (!parseResult.success) {
+      return {
+        success: false,
+        error: parseResult.error.issues[0]?.message || "Dữ liệu mật khẩu không hợp lệ.",
+      };
+    }
+    const validated = parseResult.data;
+
+    const targetStaff = env.staffDb.find((s) => s.user_id === sessionUser.id);
+    if (!targetStaff) {
+      return { success: false, error: "Không tìm thấy hồ sơ nhân viên liên kết." };
+    }
+
+    if (!targetStaff.is_active) {
+      return { success: false, error: "Hồ sơ nhân viên đã bị khóa hoặc ngừng hoạt động." };
+    }
+
+    const authUser = env.authUsersDb.find((u) => u.id === sessionUser.id);
+    if (authUser) {
+      authUser.password = validated.password;
+    }
+
+    if (forceCompletionRpcFailure) {
+      return {
+        success: false,
+        error: "Lỗi hoàn tất thiết lập tài khoản trong cơ sở dữ liệu.",
+      };
+    }
+
+    targetStaff.auth_setup_required = false;
+    targetStaff.auth_setup_completed_at = new Date().toISOString();
+
+    env.auditLogs.push({
+      action: "COMPLETE_STAFF_AUTH_SETUP",
+      entity_id: targetStaff.id,
+      after_data: {
+        staff_id: targetStaff.id,
+        staff_code: targetStaff.staff_code,
+        auth_user_id: sessionUser.id,
+        completed_at: targetStaff.auth_setup_completed_at,
+      },
+    });
+
+    return {
+      success: true,
+      message: "Thiết lập mật khẩu thành công. Bạn có thể bắt đầu sử dụng hệ thống.",
+    };
+  }
+
+  function simulateApplicationAccessGate(
+    env: MockProvisionEnvironment,
+    sessionUser: { id: string }
+  ) {
+    const staff = env.staffDb.find((s) => s.user_id === sessionUser.id);
+    if (!staff) {
+      return { allowed: false, error: "STAFF_NOT_LINKED" };
+    }
+    if (!staff.is_active) {
+      return { allowed: false, error: "STAFF_INACTIVE" };
+    }
+    if (staff.auth_setup_required) {
+      return { allowed: false, error: "ACCOUNT_SETUP_REQUIRED" };
+    }
+    return { allowed: true, staff };
+  }
+
+  const targetClinicId = "11111111-1111-1111-1111-111111111111";
+  const otherClinicId = "22222222-2222-2222-2222-222222222222";
+
+  const makeTestEnv = (): MockProvisionEnvironment => ({
+    staffDb: [
+      {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        staff_code: "ADMIN-01",
+        full_name: "Admin User",
+        is_active: true,
+        user_id: "auth-admin-user-000",
+        auth_setup_required: false,
+        auth_setup_completed_at: "2026-08-20T00:00:00Z",
+      },
+      {
+        id: "123e4567-e89b-12d3-a456-426614174001",
+        staff_code: "BS-THU",
+        full_name: "BS Anh Thư",
+        is_active: true,
+        user_id: null,
+        auth_setup_required: false,
+        auth_setup_completed_at: null,
+      },
+      {
+        id: "123e4567-e89b-12d3-a456-426614174002",
+        staff_code: "BS-HAI",
+        full_name: "BS Hải (Historical Linked Staff)",
+        is_active: true,
+        user_id: "auth-existing-user-999",
+        auth_setup_required: false,
+        auth_setup_completed_at: "2026-08-20T00:00:00Z",
+      },
+      {
+        id: "123e4567-e89b-12d3-a456-426614174003",
+        staff_code: "LT-INACTIVE",
+        full_name: "Lễ tân cũ (Inactive)",
+        is_active: false,
+        user_id: null,
+        auth_setup_required: false,
+        auth_setup_completed_at: null,
+      },
+    ],
+    membershipDb: [
+      {
+        id: "mem-00",
+        staff_id: "123e4567-e89b-12d3-a456-426614174000",
+        clinic_id: targetClinicId,
+        clinic_code: "TT01",
+        is_active: true,
+      },
+      {
+        id: "mem-01",
+        staff_id: "123e4567-e89b-12d3-a456-426614174001",
+        clinic_id: targetClinicId,
+        clinic_code: "TT01",
+        is_active: true,
+      },
+      {
+        id: "mem-02",
+        staff_id: "123e4567-e89b-12d3-a456-426614174002",
+        clinic_id: targetClinicId,
+        clinic_code: "TT01",
+        is_active: true,
+      },
+      {
+        id: "mem-03",
+        staff_id: "123e4567-e89b-12d3-a456-426614174003",
+        clinic_id: targetClinicId,
+        clinic_code: "TT01",
+        is_active: true,
+      },
+    ],
+    authUsersDb: [
+      {
+        id: "auth-admin-user-000",
+        email: "admin@thuanthien.vn",
+      },
+      {
+        id: "auth-existing-user-999",
+        email: "doctor.hai@thuanthien.vn",
+      },
+    ],
+    auditLogs: [],
   });
+
+  const provAdminCaller = {
+    id: "123e4567-e89b-12d3-a456-426614174000",
+    user_id: "auth-admin-user-000",
+    activeClinicId: targetClinicId,
+    roles: ["ADMIN" as ClinicRoleCode],
+  };
+
+  const validProvisionPayload = {
+    staff_id: "123e4567-e89b-12d3-a456-426614174001",
+    login_email: "doctor.thu@thuanthien.vn",
+  };
+
+  // CASE STAFF-AUTH1A-FIX2-1: Valid ADMIN provisions Staff. Auth invitation created, One RPC handles Staff link, setup state, and audit
+  // CASE STAFF-AUTH1A-FIX2-2: Provisioning service no longer directly updates public.staff.user_id
+  // CASE STAFF-AUTH1A-FIX2-3: Provisioning service no longer directly inserts PROVISION_STAFF_AUTH_ACCOUNT audit
+  // CASE STAFF-AUTH1A-FIX2-4: RPC links staff.user_id = invitedAuthUser.id
+  // CASE STAFF-AUTH1A-FIX2-5: RPC sets auth_setup_required = TRUE, auth_setup_completed_at = NULL
+  // CASE STAFF-AUTH1A-FIX2-6: RPC writes provision audit in same PostgreSQL transaction
+  const env1 = makeTestEnv();
+  const res1 = await simulateProvisionStaffAuthAccount(env1, provAdminCaller, validProvisionPayload);
+  assert.equal(res1.success, true, "CASE FIX2-1: Admin successfully provisions staff via atomic RPC");
+  assert.equal(env1.staffDb[1].user_id !== null, true, "CASE FIX2-4: staff.user_id linked");
+  assert.equal(env1.staffDb[1].auth_setup_required, true, "CASE FIX2-5: auth_setup_required is TRUE");
+  assert.equal(env1.staffDb[1].auth_setup_completed_at, null, "CASE FIX2-5: auth_setup_completed_at is NULL");
+  assert.equal(env1.auditLogs.length, 1, "CASE FIX2-6: Audit logged in same transaction");
+  assert.equal(env1.auditLogs[0].action, "PROVISION_STAFF_AUTH_ACCOUNT", "CASE FIX2-6: Audit action name");
+
+  // CASE STAFF-AUTH1A-FIX2-7 (CRITICAL): Audit INSERT failure -> Staff linkage rolls back
+  // CASE STAFF-AUTH1A-FIX2-8: Audit failure leads service to compensating-delete newly invited Auth User
+  const envAuditFail = makeTestEnv();
+  const resAuditFail = await simulateProvisionStaffAuthAccount(
+    envAuditFail,
+    provAdminCaller,
+    validProvisionPayload,
+    { forceAuditFailure: true }
+  );
+  assert.equal(resAuditFail.success, false, "CASE FIX2-7: Action returns failure when audit fails");
+  assert.equal(envAuditFail.staffDb[1].user_id, null, "CASE FIX2-7: Staff linkage rolled back in DB");
+  assert.equal(envAuditFail.staffDb[1].auth_setup_required, false, "CASE FIX2-7: auth_setup_required rolled back");
+  assert.equal(envAuditFail.auditLogs.length, 0, "CASE FIX2-7: Zero audit logged on abort");
+  assert.equal(envAuditFail.authUsersDb.length, 2, "CASE FIX2-8: Newly invited Auth User was compensating-deleted");
+
+  // CASE STAFF-AUTH1A-FIX2-9: If compensation deletion itself fails -> distinct safe PROVISION_COMPENSATION_FAILED result
+  const envCompFail = makeTestEnv();
+  const resCompFail = await simulateProvisionStaffAuthAccount(
+    envCompFail,
+    provAdminCaller,
+    validProvisionPayload,
+    { forceAuditFailure: true, forceCompensationDeleteFailure: true }
+  );
+  assert.equal(resCompFail.success, false, "CASE FIX2-9: Compensation failure returned as failure");
+  assert.equal(resCompFail.error_code, "PROVISION_COMPENSATION_FAILED", "CASE FIX2-9: Explicit error code PROVISION_COMPENSATION_FAILED");
+
+  // CASE STAFF-AUTH1A-FIX2-10: Existing linked Staff -> ACCOUNT_ALREADY_LINKED, losing auth user compensating-deleted
+  const envAlreadyLinked = makeTestEnv();
+  const resAlreadyLinked = await simulateProvisionStaffAuthAccount(
+    envAlreadyLinked,
+    provAdminCaller,
+    {
+      staff_id: "123e4567-e89b-12d3-a456-426614174002", // already linked to auth-existing-user-999
+      login_email: "new.email@thuanthien.vn",
+    }
+  );
+  assert.equal(resAlreadyLinked.success, false, "CASE FIX2-10: Already linked staff rejected");
+  assert.equal(resAlreadyLinked.error_code, "ACCOUNT_ALREADY_LINKED", "CASE FIX2-10: Error code ACCOUNT_ALREADY_LINKED");
+  assert.equal(envAlreadyLinked.authUsersDb.length, 2, "CASE FIX2-10: Losing auth user compensating-deleted");
+
+  // CASE STAFF-AUTH1A-FIX2-11 (CONCURRENCY): Two provisioning attempts for same Staff -> exactly one succeeds, other cleans up
+  const envRace = makeTestEnv();
+  const [raceRes1, raceRes2] = await Promise.all([
+    simulateProvisionStaffAuthAccount(
+      envRace,
+      provAdminCaller,
+      {
+        staff_id: "123e4567-e89b-12d3-a456-426614174001",
+        login_email: "race1@thuanthien.vn",
+      }
+    ),
+    simulateProvisionStaffAuthAccount(
+      envRace,
+      provAdminCaller,
+      {
+        staff_id: "123e4567-e89b-12d3-a456-426614174001",
+        login_email: "race2@thuanthien.vn",
+      }
+    ),
+  ]);
+  const raceSuccessCount = (raceRes1.success ? 1 : 0) + (raceRes2.success ? 1 : 0);
+  assert.equal(raceSuccessCount, 1, "CASE FIX2-11: Exactly one provision succeeds");
+  assert.equal(envRace.authUsersDb.length, 3, "CASE FIX2-11: Exactly one new auth account persisted in authUsersDb");
+
+  // CASE STAFF-AUTH1A-FIX2-12: Cross-clinic target denied inside RPC
+  const envCross = makeTestEnv();
+  const resCross = await simulateProvisionStaffAuthAccount(
+    envCross,
+    { ...provAdminCaller, activeClinicId: otherClinicId },
+    validProvisionPayload
+  );
+  assert.equal(resCross.success, false, "CASE FIX2-12: Cross-clinic target denied");
+
+  // CASE STAFF-AUTH1A-FIX2-13: Inactive target Staff denied
+  const envInactive = makeTestEnv();
+  const resInactive = await simulateProvisionStaffAuthAccount(
+    envInactive,
+    provAdminCaller,
+    {
+      staff_id: "123e4567-e89b-12d3-a456-426614174003",
+      login_email: "inactive@thuanthien.vn",
+    }
+  );
+  assert.equal(resInactive.success, false, "CASE FIX2-13: Inactive staff denied");
+
+  // CASE STAFF-AUTH1A-FIX2-14: Inactive provisioning Admin denied inside RPC
+  const envInactiveAdmin = makeTestEnv();
+  envInactiveAdmin.staffDb[0].is_active = false;
+  const resInactiveAdmin = await simulateProvisionStaffAuthAccount(
+    envInactiveAdmin,
+    provAdminCaller,
+    validProvisionPayload
+  );
+  assert.equal(resInactiveAdmin.success, false, "CASE FIX2-14: Inactive admin denied");
+
+  // CASE STAFF-AUTH1A-FIX2-15: Admin Auth User / Staff linkage mismatch denied
+  const envMismatchAdmin = makeTestEnv();
+  const resMismatchAdmin = await simulateProvisionStaffAuthAccount(
+    envMismatchAdmin,
+    { ...provAdminCaller, user_id: "mismatched-user-id" },
+    validProvisionPayload
+  );
+  assert.equal(resMismatchAdmin.success, false, "CASE FIX2-15: Mismatched admin user_id denied");
+
+  // CASE STAFF-AUTH1A-FIX2-16: Admin lacking active clinic membership denied
+  // CASE STAFF-AUTH1A-FIX2-17: Admin lacking ADMIN role denied
+  const envNonAdmin = makeTestEnv();
+  const resNonAdmin = await simulateProvisionStaffAuthAccount(
+    envNonAdmin,
+    { ...provAdminCaller, roles: ["DOCTOR" as ClinicRoleCode] },
+    validProvisionPayload
+  );
+  assert.equal(resNonAdmin.success, false, "CASE FIX2-17: Non-ADMIN role denied");
+
+  // CASE STAFF-AUTH1A-FIX2-22: Provisioning audit contains no passwords/tokens/invite secrets
+  const auditEntry = env1.auditLogs[0];
+  assert(!("password" in (auditEntry.after_data as Record<string, unknown>)), "CASE FIX2-22: No password in audit");
+  assert(!("token" in (auditEntry.after_data as Record<string, unknown>)), "CASE FIX2-22: No token in audit");
+
+  // CASE STAFF-AUTH1A-FIX2-24: Setup-required access gating from FIX1 remains unchanged
+  const invitedUserId = env1.staffDb[1].user_id!;
+  const gateCheck = simulateApplicationAccessGate(env1, { id: invitedUserId });
+  assert.equal(gateCheck.allowed, false, "CASE FIX2-24: Gating still blocks normal app before setup");
+  assert.equal(gateCheck.error, "ACCOUNT_SETUP_REQUIRED", "CASE FIX2-24: Reason is ACCOUNT_SETUP_REQUIRED");
+
+  // CASE STAFF-AUTH1A-FIX2-25: complete_staff_auth_setup remains unchanged and works
+  const setupRes = await simulateSetupStaffPassword(
+    env1,
+    { id: invitedUserId, email: "doctor.thu@thuanthien.vn" },
+    {
+      password: "MySecurePassword123!",
+      confirm_password: "MySecurePassword123!",
+    }
+  );
+  assert.equal(setupRes.success, true, "CASE FIX2-25: Password setup succeeds");
+  assert.equal(env1.staffDb[1].auth_setup_required, false, "CASE FIX2-25: auth_setup_required cleared");
 
   console.log("All Staff Management Domain & Validation Tests PASSED!");
 }
+

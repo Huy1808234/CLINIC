@@ -4,17 +4,17 @@ import type { RescheduleAppointmentInput, UpdateAppointmentStatusInput, CreateAp
 import { detectAppointmentConflicts } from "./detect-conflicts";
 
 /**
- * Reschedules an appointment and flags it as manual_override = true (AC-06)
+ * Reschedules an appointment in place and returns it to PLANNED status (AC-06).
  */
 export async function rescheduleAppointment(
   supabase: SupabaseClient<Database>,
   input: RescheduleAppointmentInput,
   actorUserId?: string
 ) {
-  // Fetch existing appointment to get patient & course IDs
+  // Fetch existing appointment to get patient & course IDs, and current status
   const { data: existing, error: fetchError } = await supabase
     .from("appointments")
-    .select("patient_id, treatment_course_id, doctor_id, appointment_date, scheduled_start_at")
+    .select("id, patient_id, treatment_course_id, doctor_id, appointment_date, scheduled_start_at, status")
     .eq("id", input.appointment_id)
     .single();
 
@@ -23,10 +23,20 @@ export async function rescheduleAppointment(
   }
 
   const typedExisting = existing as unknown as {
+    id: string;
     patient_id: string;
     treatment_course_id: string;
     doctor_id: string | null;
+    status: string;
   };
+
+  // Validate allowed source statuses for rescheduling (must be pre-clinical / unstarted)
+  const ALLOWED_RESCHEDULE_SOURCE_STATUSES = ["PLANNED", "CONFIRMED", "RESCHEDULED"];
+  if (!ALLOWED_RESCHEDULE_SOURCE_STATUSES.includes(typedExisting.status)) {
+    throw new Error(
+      `Không thể đổi lịch cho lịch hẹn ở trạng thái ${typedExisting.status}. Chỉ cho phép đổi lịch các lịch hẹn chưa khám/trị liệu.`
+    );
+  }
 
   const targetDoctorId = input.new_doctor_id !== undefined ? input.new_doctor_id : typedExisting.doctor_id;
 
@@ -52,7 +62,7 @@ export async function rescheduleAppointment(
       doctor_id: targetDoctorId,
       manual_override: input.manual_override ?? true,
       notes: input.notes !== undefined ? input.notes : null,
-      status: "RESCHEDULED",
+      status: "PLANNED",
       updated_at: new Date().toISOString(),
     })
     .eq("id", input.appointment_id)

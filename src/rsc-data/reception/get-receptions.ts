@@ -93,7 +93,7 @@ export async function getTodayReceptions(): Promise<ReceptionQueueItem[]> {
             id: crs.id as string,
             course_no: crs.course_no as number,
             doctor_name: (crs.staff as { full_name?: string } | null)?.full_name || null,
-            planned_session_count: crs.planned_session_count as number,
+            planned_session_count: (crs.planned_session_count as number | null) ?? null,
             completed_session_count: crs.completed_session_count as number,
             status: crs.status as string,
           }

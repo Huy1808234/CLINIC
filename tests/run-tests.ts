@@ -15,6 +15,7 @@ import { runRouteGateTests } from "./unit/route-gate.test";
 import { runApplicationAccessTests } from "./unit/application-access.test";
 import { runActionAuthorizationTests } from "./unit/action-authorization.test";
 import { runStaffGovernanceTests } from "./unit/staff-governance.test";
+import { runPasswordRecoveryTests } from "./unit/password-recovery.test";
 
 async function main() {
   try {
@@ -23,7 +24,7 @@ async function main() {
     runSchedulingTests();
     runMigrationTests();
     runMultiClinicTests();
-    runStaffManagementTests();
+    await runStaffManagementTests();
     runAuthResolverTests();
     runStaffResolverTests();
     runClinicResolverTests();
@@ -35,6 +36,7 @@ async function main() {
     runApplicationAccessTests();
     runActionAuthorizationTests();
     runStaffGovernanceTests();
+    await runPasswordRecoveryTests();
     console.log("All unit test suites executed successfully.");
   } catch (err) {
     console.error("Test failure:", err);

@@ -59,7 +59,7 @@ export interface AutoScheduleInput {
   treatment_course_id: string;
   doctor_id: string;
   start_date: string; // YYYY-MM-DD
-  planned_session_count: number;
+  schedule_count: number;
   preferred_time?: string | null; // HH:mm
   selected_weekdays?: number[]; // 1=Mon .. 6=Sat
 }

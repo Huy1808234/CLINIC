@@ -78,7 +78,10 @@ export interface PatientHistorySummary {
     id: string;
     course_no: number;
     start_date: string;
-    planned_session_count: number;
+    planned_session_count: number | null;
+    planned_by_doctor_id?: string | null;
+    planned_by_doctor_name?: string | null;
+    planned_at?: string | null;
     completed_session_count: number;
     status: CourseStatus;
     adherence_status: CourseAdherenceStatus;
