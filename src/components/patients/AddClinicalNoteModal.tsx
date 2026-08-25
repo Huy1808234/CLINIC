@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Modal, Input, Button, message, Alert } from "antd";
+import { Modal, Input, Button, Alert, App } from "antd";
 import {
   FormOutlined,
   UserOutlined,
@@ -41,6 +41,7 @@ export const AddClinicalNoteModal: React.FC<AddClinicalNoteModalProps> = ({
   doctorName,
   clinicTimezone = DEFAULT_CLINIC_TIMEZONE,
 }) => {
+  const { message } = App.useApp();
   const [content, setContent] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

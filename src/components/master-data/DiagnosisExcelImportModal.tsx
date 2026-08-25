@@ -8,9 +8,9 @@ import {
   Table,
   Tag,
   Alert,
-  message,
   Tabs,
   Spin,
+  App,
 } from "antd";
 import {
   InboxOutlined,
@@ -43,6 +43,7 @@ export const DiagnosisExcelImportModal: React.FC<DiagnosisExcelImportModalProps>
   onClose,
   onSuccess,
 }) => {
+  const { message } = App.useApp();
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [fileName, setFileName] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Modal, Form, Input, Select, Switch, message, Alert } from "antd";
+import { Modal, Form, Input, Select, Switch, Alert, App } from "antd";
 import {
   createDiagnosisCatalogEntryAction,
   updateDiagnosisCatalogEntryAction,
@@ -21,6 +21,7 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({
   onSuccess,
   editingItem,
 }) => {
+  const { message } = App.useApp();
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

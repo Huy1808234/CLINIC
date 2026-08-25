@@ -10,9 +10,9 @@ import {
   Tag,
   Dropdown,
   Popconfirm,
-  message,
   Tooltip,
   Pagination,
+  App,
 } from "antd";
 import type { MenuProps, TableColumnsType } from "antd";
 import {
@@ -53,6 +53,7 @@ export const DiagnosisCatalogClientView: React.FC<DiagnosisCatalogClientViewProp
   pageResult,
   userRoles,
 }) => {
+  const { message } = App.useApp();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
