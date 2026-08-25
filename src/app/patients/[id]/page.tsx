@@ -1,12 +1,10 @@
 import React from "react";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { getPatientHistory } from "@/rsc-data/patients/get-patient-history";
 import { getCatalogs } from "@/rsc-data/treatment/get-catalogs";
 import { requireApplicationPageAccessContext } from "@/lib/auth/application-access";
 import { getCurrentStaffRolesForClinic } from "@/lib/auth/role-resolver";
-import { Button } from "@/components/ui/Button";
 import { PatientChartWorkspace } from "@/components/clinical/PatientChartWorkspace";
 
 export const dynamic = "force-dynamic";
@@ -35,13 +33,7 @@ export default async function PatientDetailsPage({ params }: PatientDetailsPageP
     <AppShell
       title="Bác sĩ / Hồ sơ bệnh nhân"
       subtitle={`Mã BN: ${history.patient.patient_code} · ${history.patient.full_name}`}
-      actions={
-        <Link href="/patients">
-          <Button size="sm" variant="outline">
-            Quay Lại Danh Sách
-          </Button>
-        </Link>
-      }
+      backHref="/patients"
     >
       <div className="w-full">
         <PatientChartWorkspace

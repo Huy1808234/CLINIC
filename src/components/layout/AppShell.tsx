@@ -16,6 +16,7 @@ import { ClientAppLayout } from "./ClientAppLayout";
 export interface AppShellProps {
   title?: string;
   subtitle?: string;
+  backHref?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }
@@ -31,7 +32,7 @@ export interface AppShellProps {
  * - Unauthenticated -> redirect to /login
  * - Unknown errors -> re-thrown to application error boundary
  */
-export async function AppShell({ title, subtitle, actions, children }: AppShellProps) {
+export async function AppShell({ title, subtitle, backHref, actions, children }: AppShellProps) {
   let accessContext;
   let activeRoles: ClinicRoleCode[] = [];
 
@@ -81,6 +82,7 @@ export async function AppShell({ title, subtitle, actions, children }: AppShellP
       activeRoles={activeRoles}
       title={title}
       subtitle={subtitle}
+      backHref={backHref}
       actions={actions}
     >
       {children}

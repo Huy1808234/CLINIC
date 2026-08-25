@@ -19,6 +19,7 @@ export function runAuthProtectedPageLogoutStabilityTests() {
   const authActionsPath = path.join(process.cwd(), "src", "app", "actions", "auth-actions.ts");
   const diagnosisActionsPath = path.join(process.cwd(), "src", "app", "actions", "diagnosis-catalog-actions.ts");
   const sidebarPath = path.join(process.cwd(), "src", "components", "layout", "Sidebar.tsx");
+  const headerPath = path.join(process.cwd(), "src", "components", "layout", "Header.tsx");
 
   const pageCode = fs.readFileSync(pagePath, "utf-8");
   const appAccessCode = fs.readFileSync(appAccessPath, "utf-8");
@@ -26,6 +27,7 @@ export function runAuthProtectedPageLogoutStabilityTests() {
   const authActionsCode = fs.readFileSync(authActionsPath, "utf-8");
   const diagnosisActionsCode = fs.readFileSync(diagnosisActionsPath, "utf-8");
   const sidebarCode = fs.readFileSync(sidebarPath, "utf-8");
+  const headerCode = fs.readFileSync(headerPath, "utf-8");
 
   // AUTH-STABLE-1 & AUTH-STABLE-2: Page uses canonical requireApplicationPageAccessContext
   assert.ok(
@@ -96,10 +98,11 @@ export function runAuthProtectedPageLogoutStabilityTests() {
     "NEXT_REDIRECT digest errors are preserved and re-thrown to avoid redirect loops (AUTH-STABLE-10)"
   );
 
-  // AUTH-STABLE-11 & AUTH-STABLE-12: Sidebar handles logout cleanly
+  // AUTH-STABLE-11 & AUTH-STABLE-12: Header / Sidebar handles logout cleanly
   assert.ok(
-    sidebarCode.includes("signOutAction()") && sidebarCode.includes('router.replace("/login")'),
-    "Sidebar handleLogout invokes signOutAction and replaces router to /login (AUTH-STABLE-11, AUTH-STABLE-12)"
+    (headerCode.includes("signOutAction()") && headerCode.includes('router.replace("/login")')) ||
+      (sidebarCode.includes("signOutAction()") && sidebarCode.includes('router.replace("/login")')),
+    "Header/Sidebar handleLogout invokes signOutAction and replaces router to /login (AUTH-STABLE-11, AUTH-STABLE-12)"
   );
 
   console.log("All AUTH-PROTECTED-PAGE-LOGOUT-STABILITY1 Tests PASSED!");

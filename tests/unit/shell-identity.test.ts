@@ -55,19 +55,22 @@ export function runShellIdentityTests() {
   const sec3 = formatSecondaryAccountLabel(["Y_SI"], "Thuận Thiên");
   assert.equal(sec3, "Y sĩ • Thuận Thiên", "SHELL-ID-6: Y sĩ • Thuận Thiên");
 
-  // SHELL-ID-2: Source Inspection: Ensure no hardcoded "Bác Sĩ Tiếp Nhận" or "Phòng Khám YHCT" in Sidebar.tsx
+  // SHELL-ID-2: Source Inspection: Ensure no hardcoded "Bác Sĩ Tiếp Nhận" or "Phòng Khám YHCT" in Sidebar.tsx / Header.tsx
   const sidebarPath = path.join(process.cwd(), "src", "components", "layout", "Sidebar.tsx");
+  const headerPath = path.join(process.cwd(), "src", "components", "layout", "Header.tsx");
   assert(fs.existsSync(sidebarPath), "Sidebar.tsx exists");
+  assert(fs.existsSync(headerPath), "Header.tsx exists");
   const sidebarCode = fs.readFileSync(sidebarPath, "utf-8");
+  const headerCode = fs.readFileSync(headerPath, "utf-8");
 
   assert(!sidebarCode.includes("Bác Sĩ Tiếp Nhận"), "SHELL-ID-2: No hardcoded 'Bác Sĩ Tiếp Nhận' in Sidebar");
   assert(!sidebarCode.includes("Phòng Khám YHCT"), "SHELL-ID-2: No hardcoded 'Phòng Khám YHCT' in Sidebar");
 
-  // SHELL-ID-1 & SHELL-ID-3: Dynamic fields in Sidebar
-  assert(sidebarCode.includes("currentStaff?.full_name"), "SHELL-ID-1: Sidebar renders currentStaff.full_name");
+  // SHELL-ID-1 & SHELL-ID-3: Dynamic fields in AppShell Header / Sidebar
+  assert(headerCode.includes("currentStaff?.full_name"), "SHELL-ID-1: Header renders currentStaff.full_name");
   assert(sidebarCode.includes("activeClinic?.name"), "SHELL-ID-3: Sidebar renders activeClinic.name");
-  assert(sidebarCode.includes("initials"), "SHELL-ID-13: Sidebar renders initials");
-  assert(sidebarCode.includes("secondaryLabel"), "SHELL-ID-3: Sidebar renders secondaryLabel");
+  assert(headerCode.includes("initials"), "SHELL-ID-13: Header renders initials");
+  assert(headerCode.includes("roleLabel"), "SHELL-ID-3: Header renders roleLabel");
 
   // ==========================================
   // APP-SHELL-NAV-AUTH1 & NAV-FIX1 TESTS

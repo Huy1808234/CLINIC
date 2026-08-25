@@ -2,9 +2,8 @@
 
 import React from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
-import { Menu, Avatar, Dropdown, Typography, Drawer } from "antd";
-import type { MenuProps } from "antd";
+import { usePathname } from "next/navigation";
+import { Menu, Drawer } from "antd";
 import {
   UserAddOutlined,
   CalendarOutlined,
@@ -12,20 +11,10 @@ import {
   TeamOutlined,
   CloudUploadOutlined,
   MedicineBoxOutlined,
-  DownOutlined,
-  SwapOutlined,
-  LogoutOutlined,
   CloseOutlined,
 } from "@ant-design/icons";
 import type { ClinicRoleCode } from "@/types/clinic";
-import {
-  getAvatarInitials,
-  formatSecondaryAccountLabel,
-  isRouteVisibleForRoles,
-} from "@/lib/auth/shell-identity";
-import { signOutAction } from "@/app/actions/auth-actions";
-
-const { Text } = Typography;
+import { isRouteVisibleForRoles } from "@/lib/auth/shell-identity";
 
 export interface SidebarProps {
   open?: boolean;
@@ -53,11 +42,9 @@ interface NavItemConfig {
 export const Sidebar: React.FC<SidebarProps> = ({
   open = false,
   onClose,
-  currentStaff,
   activeClinic,
   activeRoles = [],
 }) => {
-  const router = useRouter();
   const pathname = usePathname();
 
   const allNavConfigs: NavItemConfig[] = [
@@ -103,43 +90,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const visibleNavConfigs = allNavConfigs.filter((item) =>
     isRouteVisibleForRoles(item.href, activeRoles)
   );
-
-  const initials = getAvatarInitials(currentStaff?.full_name || "");
-  const secondaryLabel = formatSecondaryAccountLabel(
-    activeRoles,
-    activeClinic?.name || ""
-  );
-
-  const handleLogout = async () => {
-    onClose?.();
-    const res = await signOutAction();
-    if (res?.success) {
-      router.replace("/login");
-      router.refresh();
-    }
-  };
-
-  const staffDropdownItems: MenuProps["items"] = [
-    {
-      key: "switch-clinic",
-      icon: <SwapOutlined />,
-      label: "Đổi cơ sở làm việc",
-      onClick: () => {
-        onClose?.();
-        router.push("/select-clinic");
-      },
-    },
-    {
-      type: "divider",
-    },
-    {
-      key: "logout",
-      icon: <LogoutOutlined />,
-      danger: true,
-      label: "Đăng xuất",
-      onClick: handleLogout,
-    },
-  ];
 
   // Determine active key from current path
   const selectedKey =
@@ -210,37 +160,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           items={drawerMenuItems}
           style={{ borderRight: 0 }}
         />
-      </div>
-
-      {/* 3. Current Staff Identity Bottom Card */}
-      <div className="p-3 border-t border-slate-100 bg-slate-50/70 shrink-0">
-        <Dropdown menu={{ items: staffDropdownItems }} trigger={["click"]} placement="topRight">
-          <div className="flex items-center justify-between gap-2.5 rounded-lg p-1.5 hover:bg-slate-200/60 cursor-pointer transition-colors">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Avatar
-                size={36}
-                style={{
-                  backgroundColor: "#0f766e",
-                  color: "#ffffff",
-                  fontWeight: 700,
-                  fontSize: 13,
-                  flexShrink: 0,
-                }}
-              >
-                {initials}
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <Text strong className="text-xs text-slate-900 truncate block">
-                  {currentStaff?.full_name}
-                </Text>
-                <p className="text-[10px] text-slate-500 truncate m-0">
-                  {secondaryLabel}
-                </p>
-              </div>
-            </div>
-            <DownOutlined style={{ fontSize: 10, color: "#94a3b8" }} className="shrink-0" />
-          </div>
-        </Dropdown>
       </div>
     </Drawer>
   );

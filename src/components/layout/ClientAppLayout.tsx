@@ -22,6 +22,7 @@ export interface ClientAppLayoutProps {
   activeRoles?: ClinicRoleCode[];
   title?: string;
   subtitle?: string;
+  backHref?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }
@@ -32,6 +33,7 @@ export const ClientAppLayout: React.FC<ClientAppLayoutProps> = ({
   activeRoles = [],
   title,
   subtitle,
+  backHref,
   actions,
   children,
 }) => {
@@ -53,7 +55,11 @@ export const ClientAppLayout: React.FC<ClientAppLayoutProps> = ({
         onOpenNav={() => setDrawerOpen(true)}
         title={title}
         subtitle={subtitle}
+        backHref={backHref}
         actions={actions}
+        currentStaff={currentStaff}
+        activeClinic={activeClinic}
+        activeRoles={activeRoles}
       />
 
       {/* 3. Full-Width Fluid Content Container (No reserved Sider width) */}
