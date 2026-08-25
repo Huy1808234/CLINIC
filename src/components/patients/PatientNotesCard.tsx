@@ -256,7 +256,7 @@ export const PatientNotesCard: React.FC<PatientNotesCardProps> = ({
               <Spin tip="Đang tải danh sách ghi chú..." />
             </div>
           ) : drawerError ? (
-            <Alert type="error" message={drawerError} showIcon />
+            <Alert type="error" title={drawerError} showIcon />
           ) : drawerNotes.length === 0 ? (
             <div className="text-center text-xs text-slate-400 py-8 italic">
               Không có ghi chú nào.

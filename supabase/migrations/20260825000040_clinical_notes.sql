@@ -50,10 +50,10 @@ CREATE POLICY "Allow authenticated doctors insert clinical_notes"
     TO authenticated
     WITH CHECK (
         clinic_id IN (
-            SELECT scr.clinic_id
+            SELECT scm.clinic_id
             FROM public.staff_clinic_roles scr
-            JOIN public.staff s ON s.id = scr.staff_id
-            JOIN public.staff_clinic_memberships scm ON scm.staff_id = s.id AND scm.clinic_id = scr.clinic_id
+            JOIN public.staff_clinic_memberships scm ON scm.id = scr.staff_clinic_membership_id
+            JOIN public.staff s ON s.id = scm.staff_id
             WHERE s.user_id = auth.uid()
               AND scr.role_code = 'DOCTOR'
               AND scm.is_active = TRUE

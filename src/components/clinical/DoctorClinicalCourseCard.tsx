@@ -419,7 +419,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
             <Alert
               type="error"
               showIcon
-              message={errorMsg}
+              title={errorMsg}
               closable
               onClose={() => setErrorMsg(null)}
             />
@@ -429,7 +429,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
             <Alert
               type="success"
               showIcon
-              message={successMsg}
+              title={successMsg}
             />
           )}
 
@@ -646,7 +646,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
               <Alert
                 type="info"
                 showIcon
-                message="Chưa có gợi ý DVKT theo TT06 cho mã bệnh này."
+                title="Chưa có gợi ý DVKT theo TT06 cho mã bệnh này."
                 description="Bác sĩ có thể tự chọn các dịch vụ kỹ thuật được phép phía dưới."
                 className="text-xs"
               />
@@ -657,7 +657,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
               <Alert
                 type="warning"
                 showIcon
-                message={templateResolution.error || "Không thể xác định phiên bản mẫu điều trị."}
+                title={templateResolution.error || "Không thể xác định phiên bản mẫu điều trị."}
                 className="text-xs"
               />
             )}

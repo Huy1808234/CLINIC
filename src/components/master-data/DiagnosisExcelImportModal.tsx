@@ -249,7 +249,7 @@ export const DiagnosisExcelImportModal: React.FC<DiagnosisExcelImportModalProps>
     >
       <div className="pt-3 space-y-4">
         {errorMessage && (
-          <Alert message={errorMessage} type="error" showIcon closable className="text-xs" />
+          <Alert title={errorMessage} type="error" showIcon closable className="text-xs" />
         )}
 
         <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">

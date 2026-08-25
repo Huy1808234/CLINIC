@@ -169,7 +169,7 @@ export const AddClinicalNoteModal: React.FC<AddClinicalNoteModalProps> = ({
 
         {/* Error message */}
         {errorMessage && (
-          <Alert message={errorMessage} type="error" showIcon className="text-xs py-2 rounded-lg" />
+          <Alert title={errorMessage} type="error" showIcon className="text-xs py-2 rounded-lg" />
         )}
 
         {/* Content input */}

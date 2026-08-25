@@ -199,7 +199,7 @@ export const SelectClinicClientView: React.FC<SelectClinicClientViewProps> = ({
         {/* Error Alert Message */}
         {errorMessage && (
           <div className="mb-6">
-            <Alert message={errorMessage} type="error" showIcon className="rounded-xl shadow-xs" />
+            <Alert title={errorMessage} type="error" showIcon className="rounded-xl shadow-xs" />
           </div>
         )}
 

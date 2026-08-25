@@ -123,7 +123,7 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({
     >
       <div className="pt-3">
         {errorMessage && (
-          <Alert message={errorMessage} type="error" showIcon closable className="mb-4 text-xs" />
+          <Alert title={errorMessage} type="error" showIcon closable className="mb-4 text-xs" />
         )}
 
         <Form form={form} layout="vertical" className="text-xs">
