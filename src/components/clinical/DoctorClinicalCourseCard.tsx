@@ -6,15 +6,16 @@ import {
   Card,
   Drawer,
   Select,
+  Input,
   InputNumber,
   Button,
   Tag,
   Alert,
-  Space,
   Typography,
   Checkbox,
   Spin,
   Collapse,
+  App,
 } from "antd";
 import {
   EditOutlined,
@@ -23,10 +24,13 @@ import {
   MedicineBoxOutlined,
   BulbOutlined,
   InfoCircleOutlined,
+  SearchOutlined,
+  CalendarOutlined,
 } from "@ant-design/icons";
 import type { DiagnosisCatalogItem, ServiceCatalogItem } from "@/types/catalog";
 import type { PatientHistorySummary } from "@/types/patient";
 import type { TemplateSuggestionResolution } from "@/types/clinical-template";
+import { removeVietnameseAccents } from "@/utils/format-person-name";
 import {
   recordCourseDiagnosisAction,
   orderCourseServicesAction,
@@ -44,12 +48,37 @@ export interface DoctorClinicalCourseCardProps {
   isDoctor: boolean;
 }
 
+function matchSearchNormalized(target: string, query: string): boolean {
+  if (!query.trim()) return true;
+  const q = query.toLowerCase().trim();
+  const qNorm = removeVietnameseAccents(q);
+  const t = target.toLowerCase();
+  const tNorm = removeVietnameseAccents(t);
+  return t.includes(q) || tNorm.includes(qNorm);
+}
+
+function getServiceGroupLabel(group: string | null, name: string): string {
+  if (group && group.trim()) return group.trim().toUpperCase();
+  const lower = name.toLowerCase();
+  if (lower.startsWith("điện châm")) return "ĐIỆN CHÂM";
+  if (lower.startsWith("bó thuốc")) return "BÓ THUỐC";
+  if (lower.startsWith("hào châm")) return "HÀO CHÂM";
+  if (lower.startsWith("thủy châm")) return "THỦY CHÂM";
+  if (lower.startsWith("xông thuốc")) return "XÔNG THUỐC";
+  if (lower.startsWith("ngâm thuốc")) return "NGÂM THUỐC";
+  if (lower.startsWith("xoa bóp")) return "XOA BÓP - BẤM HUYỆT";
+  if (lower.startsWith("cấy chỉ")) return "CẤY CHỈ";
+  if (lower.startsWith("giác hơi")) return "GIÁC HƠI";
+  return "DỊCH VỤ KỸ THUẬT KHÁC";
+}
+
 export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> = ({
   course,
   diagnosesCatalog,
   servicesCatalog,
   isDoctor,
 }) => {
+  const { message } = App.useApp();
   const router = useRouter();
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -77,6 +106,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(
     existingServices.map((s) => s.service_id)
   );
+  const [serviceNotes, setServiceNotes] = useState<string>("");
   const [plannedSessionsInput, setPlannedSessionsInput] = useState<number | null>(
     course.planned_session_count || null
   );
@@ -144,16 +174,39 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
       }));
   }, [diagnosesCatalog]);
 
-  const serviceOptions = useMemo(() => {
-    return servicesCatalog
-      .filter((s) => s.is_active)
-      .map((s) => ({
+  // Grouped active service options for manual DVKT combobox
+  const groupedServiceOptions = useMemo(() => {
+    const groups: Record<string, Array<{ value: string; label: string; code: string; name: string; group: string; disabled: boolean }>> = {};
+
+    for (const s of servicesCatalog) {
+      if (!s.is_active) continue;
+      const groupName = getServiceGroupLabel(s.service_group, s.service_name);
+      if (!groups[groupName]) {
+        groups[groupName] = [];
+      }
+      groups[groupName].push({
         value: s.id,
         label: `${s.service_code} — ${s.service_name}`,
         code: s.service_code,
         name: s.service_name,
-      }));
+        group: groupName,
+        disabled: false,
+      });
+    }
+
+    return Object.entries(groups).map(([groupTitle, opts]) => ({
+      label: <span className="font-bold text-slate-700 text-xs tracking-wider">{groupTitle}</span>,
+      title: groupTitle,
+      options: opts,
+    }));
   }, [servicesCatalog]);
+
+  // Selected services list
+  const selectedServices = useMemo(() => {
+    return selectedServiceIds
+      .map((id) => servicesCatalog.find((s) => s.id === id))
+      .filter((s): s is ServiceCatalogItem => Boolean(s));
+  }, [selectedServiceIds, servicesCatalog]);
 
   const handleOpenDrawer = () => {
     const initialPrimaryId = primaryDiag?.diagnosis_id || undefined;
@@ -164,6 +217,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
         .filter((id): id is string => Boolean(id))
     );
     setSelectedServiceIds(existingServices.map((s) => s.service_id));
+    setServiceNotes("");
     setPlannedSessionsInput(course.planned_session_count || null);
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -189,6 +243,10 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
     setSelectedServiceIds((prev) => Array.from(new Set([...prev, ...availableNewIds])));
   };
 
+  const handleRemoveService = (serviceId: string) => {
+    setSelectedServiceIds((prev) => prev.filter((id) => id !== serviceId));
+  };
+
   const handleSaveClinicalPlan = async () => {
     if (!selectedPrimaryId) {
       setErrorMsg("Vui lòng chọn chẩn đoán chính cho liệu trình.");
@@ -201,9 +259,12 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
 
     try {
       // 1. Record Primary Diagnosis
+      const primaryObj = diagnosesCatalog.find((d) => d.id === selectedPrimaryId);
       const primaryRes = await recordCourseDiagnosisAction({
         treatment_course_id: course.id,
         diagnosis_id: selectedPrimaryId,
+        raw_code: primaryObj?.code,
+        raw_text: primaryObj?.name,
         is_primary: true,
         diagnosis_type: "PRIMARY",
       });
@@ -216,9 +277,12 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
 
       // 2. Record Secondary Diagnoses if any
       for (const secId of selectedSecondaryIds) {
+        const secObj = diagnosesCatalog.find((d) => d.id === secId);
         const secRes = await recordCourseDiagnosisAction({
           treatment_course_id: course.id,
           diagnosis_id: secId,
+          raw_code: secObj?.code,
+          raw_text: secObj?.name,
           is_primary: false,
           diagnosis_type: "SECONDARY",
         });
@@ -238,6 +302,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
         const servRes = await orderCourseServicesAction({
           treatment_course_id: course.id,
           service_ids: newServiceIds,
+          notes: serviceNotes || null,
         });
 
         if (!servRes.success) {
@@ -266,6 +331,8 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
       }
 
       setSuccessMsg("Đã lưu kế hoạch chẩn đoán và chỉ định DVKT thành công.");
+      message.success("Đã lưu kế hoạch chẩn đoán và chỉ định DVKT thành công.");
+
       setTimeout(() => {
         setIsDrawerOpen(false);
         router.refresh();
@@ -281,14 +348,14 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
     <>
       <Card
         size="small"
-        className="rounded-xl border border-slate-200 shadow-sm bg-white overflow-hidden mb-4"
+        className="rounded-xl border border-slate-200 shadow-xs bg-white overflow-hidden mb-4"
         title={
           <div className="flex items-center justify-between py-1">
             <div className="flex items-center gap-2">
               <span className="font-bold text-slate-800 text-sm">
                 Liệu Trình {course.course_no} (LT{course.course_no})
               </span>
-              <Tag color={course.status === "ACTIVE" ? "green" : "default"} className="m-0 text-xs">
+              <Tag color={course.status === "ACTIVE" ? "green" : "default"} className="m-0 text-xs font-medium">
                 {course.status === "ACTIVE" ? "Đang điều trị" : course.status}
               </Tag>
             </div>
@@ -387,19 +454,27 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
       <Drawer
         title={
           <div className="flex items-center gap-2">
-            <MedicineBoxOutlined className="text-teal-600 text-lg" />
-            <span className="font-bold text-slate-900">
+            <Tag color="cyan" className="m-0 text-xs font-semibold px-2 py-0.5 rounded-md border-teal-200 text-teal-800 bg-teal-50">
+              BÁC SĨ CHỈ ĐỊNH
+            </Tag>
+            <span className="font-bold text-slate-900 text-base">
               Chẩn Đoán & Chỉ Định — Liệu Trình LT{course.course_no}
             </span>
           </div>
         }
         placement="right"
-        width={580}
+        width={760}
+        destroyOnHidden
         onClose={() => setIsDrawerOpen(false)}
         open={isDrawerOpen}
         extra={
-          <Space>
-            <Button onClick={() => setIsDrawerOpen(false)} disabled={isSubmitting}>
+          <span className="text-xs text-slate-400 font-normal">
+            Chẩn đoán · DVKT · kế hoạch điều trị
+          </span>
+        }
+        footer={
+          <div className="flex items-center justify-end gap-2.5">
+            <Button onClick={() => setIsDrawerOpen(false)} disabled={isSubmitting} size="middle">
               Đóng
             </Button>
             <Button
@@ -407,14 +482,15 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
               onClick={handleSaveClinicalPlan}
               loading={isSubmitting}
               icon={<CheckCircleOutlined />}
+              size="middle"
               className="bg-[#00897b] hover:bg-teal-700"
             >
               Lưu Kế Hoạch
             </Button>
-          </Space>
+          </div>
         }
       >
-        <div className="space-y-5">
+        <div className="space-y-6">
           {errorMsg && (
             <Alert
               type="error"
@@ -434,19 +510,25 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
           )}
 
           {/* SECTION 1: CHẨN ĐOÁN */}
-          <div className="space-y-4 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80">
-            <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <span>1. Chẩn Đoán Bệnh</span>
+          <div className="space-y-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200/80">
+            <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <MedicineBoxOutlined className="text-teal-600" />
+                1. Chẩn Đoán Bệnh
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Danh mục ICD-10 & YHCT chuẩn hóa
+              </span>
             </div>
 
             {/* Primary Diagnosis */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Chẩn Đoán Chính (Mã bệnh chính) <span className="text-rose-500">*</span>
               </label>
               <Select
                 showSearch
-                placeholder="🔎 Tìm mã hoặc tên bệnh theo ICD/YHCT..."
+                placeholder="🔎 Gõ mã bệnh hoặc tên chẩn đoán (VD: thoái hoá khớp, đau lưng...)"
                 className="w-full"
                 value={selectedPrimaryId}
                 onChange={(val) => {
@@ -455,11 +537,13 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
                   fetchTemplateSuggestions(val);
                 }}
                 filterOption={(input, option) => {
-                  const label = String(option?.label || "").toLowerCase();
-                  const code = String(option?.code || "").toLowerCase();
-                  const name = String(option?.name || "").toLowerCase();
+                  if (!option || !input) return true;
+                  const label = String(option.label || "").toLowerCase();
+                  const code = String(option.code || "").toLowerCase();
+                  const name = String(option.name || "").toLowerCase();
                   const q = input.toLowerCase().trim();
-                  return label.includes(q) || code.includes(q) || name.includes(q);
+                  const combined = `${code} ${name} ${label}`;
+                  return label.includes(q) || code.includes(q) || name.includes(q) || matchSearchNormalized(combined, input);
                 }}
                 options={primaryDiagnosisOptions}
                 size="large"
@@ -471,7 +555,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
 
             {/* Secondary Diagnoses */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Chẩn Đoán Kèm Theo (Tùy chọn)
               </label>
               <Select
@@ -482,11 +566,13 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
                 value={selectedSecondaryIds}
                 onChange={setSelectedSecondaryIds}
                 filterOption={(input, option) => {
-                  const label = String(option?.label || "").toLowerCase();
-                  const code = String(option?.code || "").toLowerCase();
-                  const name = String(option?.name || "").toLowerCase();
+                  if (!option || !input) return true;
+                  const label = String(option.label || "").toLowerCase();
+                  const code = String(option.code || "").toLowerCase();
+                  const name = String(option.name || "").toLowerCase();
                   const q = input.toLowerCase().trim();
-                  return label.includes(q) || code.includes(q) || name.includes(q);
+                  const combined = `${code} ${name} ${label}`;
+                  return label.includes(q) || code.includes(q) || name.includes(q) || matchSearchNormalized(combined, input);
                 }}
                 options={secondaryDiagnosisOptions}
                 size="middle"
@@ -495,12 +581,12 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
           </div>
 
           {/* SECTION 2: GỢI Ý DVKT THEO TT06 */}
-          <div className="bg-teal-50/50 p-3.5 rounded-xl border border-teal-100 space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="bg-teal-50/50 p-4 rounded-xl border border-teal-100 space-y-3">
+            <div className="flex items-center justify-between border-b border-teal-100/80 pb-2">
               <div className="flex items-center gap-1.5">
                 <BulbOutlined className="text-teal-600 text-sm" />
                 <span className="text-xs font-bold text-teal-900 uppercase tracking-wider">
-                  2. Gợi Ý DVKT Theo TT06
+                  Gợi Ý DVKT Theo Mã Bệnh (TT06)
                 </span>
                 <Tag color="cyan" className="text-[10px] m-0 font-medium">
                   TT_06_2026
@@ -513,7 +599,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
                   onClick={handleSelectAllAvailableSuggestions}
                   className="text-xs text-teal-700 font-semibold p-0 h-auto"
                 >
-                  Chọn tất cả gợi ý
+                  + Chọn tất cả gợi ý
                 </Button>
               )}
             </div>
@@ -542,7 +628,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
                             : !item.is_available
                             ? "bg-slate-100/70 border-slate-200 opacity-60 cursor-not-allowed"
                             : isSelected
-                            ? "bg-teal-50 border-teal-400 shadow-xs cursor-pointer"
+                            ? "bg-teal-50 border-teal-400 shadow-2xs cursor-pointer"
                             : "bg-white border-slate-200 hover:border-teal-300 cursor-pointer"
                         }`}
                       >
@@ -578,11 +664,11 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
                             </Tag>
                           ) : isSelected ? (
                             <Tag color="success" className="m-0 text-[10px]">
-                              Đã chọn
+                              ✓ Đã chọn
                             </Tag>
                           ) : (
                             <Tag color="cyan" className="m-0 text-[10px]">
-                              Gợi ý
+                              + Chọn
                             </Tag>
                           )}
                         </div>
@@ -646,8 +732,8 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
               <Alert
                 type="info"
                 showIcon
-                title="Chưa có gợi ý DVKT theo TT06 cho mã bệnh này."
-                description="Bác sĩ có thể tự chọn các dịch vụ kỹ thuật được phép phía dưới."
+                title="Chưa có gói gợi ý DVKT TT06 cho mã bệnh này."
+                description="Bác sĩ có thể tự chọn các dịch vụ kỹ thuật phù hợp từ danh mục phía dưới."
                 className="text-xs"
               />
             )}
@@ -671,48 +757,109 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
           </div>
 
           {/* SECTION 3: DVKT CHỈ ĐỊNH / CHỌN THÊM */}
-          <div className="space-y-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80">
-            <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-              <span>3. Tổng Hợp DVKT Chỉ Định ({selectedServiceIds.length})</span>
+          <div className="space-y-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200/80">
+            <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <MedicineBoxOutlined className="text-teal-600" />
+                3. Dịch Vụ Kỹ Thuật (DVKT Bác Sĩ Chỉ Định)
+              </span>
+              <Tag color={selectedServices.length > 0 ? "teal" : "default"} className="m-0 font-semibold text-xs">
+                Đã chọn: {selectedServices.length} DVKT
+              </Tag>
             </div>
 
-            <Select
-              mode="multiple"
-              showSearch
-              placeholder="Chọn thêm dịch vụ kỹ thuật ngoài gợi ý..."
-              className="w-full"
-              value={selectedServiceIds}
-              onChange={setSelectedServiceIds}
-              filterOption={(input, option) => {
-                const label = String(option?.label || "").toLowerCase();
-                const code = String(option?.code || "").toLowerCase();
-                const name = String(option?.name || "").toLowerCase();
-                const q = input.toLowerCase().trim();
-                return label.includes(q) || code.includes(q) || name.includes(q);
-              }}
-              options={serviceOptions}
-              size="large"
-            />
-            <span className="text-[11px] text-slate-400 block">
-              Bác sĩ có thể thêm hoặc bớt các dịch vụ kỹ thuật phù hợp với chẩn đoán lâm sàng.
-            </span>
+            {/* Searchable DVKT Combobox */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Tìm & Chọn Dịch Vụ Kỹ Thuật (Gõ tên, mã hoặc chỉ định)
+              </label>
+              <Select
+                mode="multiple"
+                showSearch
+                placeholder="Nhập tên, mã hoặc chỉ định DVKT để tìm (VD: tiền đình, xoang, liệt mặt, xoa bóp...)"
+                className="w-full"
+                value={selectedServiceIds}
+                onChange={setSelectedServiceIds}
+                filterOption={(input, option) => {
+                  if (!option || !input) return true;
+                  const opt = option as { label?: unknown; code?: string; name?: string; group?: string };
+                  const label = String(opt.label || "").toLowerCase();
+                  const code = String(opt.code || "").toLowerCase();
+                  const name = String(opt.name || "").toLowerCase();
+                  const group = String(opt.group || "").toLowerCase();
+                  const q = input.toLowerCase().trim();
+                  const combined = `${code} ${name} ${label} ${group}`;
+                  return label.includes(q) || code.includes(q) || name.includes(q) || group.includes(q) || matchSearchNormalized(combined, input);
+                }}
+                options={groupedServiceOptions}
+                size="large"
+                prefix={<SearchOutlined className="text-slate-400 mr-1" />}
+                style={{ minHeight: "42px" }}
+              />
+            </div>
+
+            {/* Selected DVKT Compact Chips */}
+            <div>
+              <span className="text-[11px] font-semibold text-slate-600 block mb-1.5 uppercase tracking-wide">
+                Danh sách DVKT đã chọn:
+              </span>
+              {selectedServices.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedServices.map((s) => (
+                    <Tag
+                      key={s.id}
+                      closable
+                      onClose={() => handleRemoveService(s.id)}
+                      className="px-2.5 py-1 text-xs bg-white border-teal-200 text-teal-900 rounded-lg flex items-center gap-1.5 font-medium m-0 shadow-2xs hover:border-teal-400 transition-colors"
+                    >
+                      <span>{s.service_name}</span>
+                      <span className="text-[10px] text-teal-600 font-mono">({s.service_code})</span>
+                    </Tag>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 italic py-1.5">
+                  Chưa chọn DVKT.
+                </div>
+              )}
+            </div>
+
+            {/* Free Text Note */}
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                Ghi chú chỉ định DVKT (Tùy chọn):
+              </label>
+              <Input.TextArea
+                rows={2}
+                placeholder="VD: Châm tả huyệt Giáp tích, theo dõi đau tăng khi vận động, chiếu đèn 20 phút..."
+                value={serviceNotes}
+                onChange={(e) => setServiceNotes(e.target.value)}
+                className="text-xs rounded-lg"
+              />
+            </div>
           </div>
 
           {/* SECTION 4: KẾ HOẠCH BUỔI ĐIỀU TRỊ */}
           {course.planned_session_count === null && (
-            <div className="space-y-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80">
-              <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                <span>4. Kế Hoạch Số Buổi Điều Trị</span>
+            <div className="space-y-4 bg-slate-50/70 p-4 rounded-xl border border-slate-200/80">
+              <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                  <CalendarOutlined className="text-teal-600" />
+                  4. Kế Hoạch Số Buổi Điều Trị
+                </span>
               </div>
-              <InputNumber
-                min={1}
-                max={60}
-                placeholder="VD: 7 hoặc 10 buổi"
-                className="w-full"
-                value={plannedSessionsInput}
-                onChange={(val) => setPlannedSessionsInput(val)}
-                size="large"
-              />
+              <div className="flex items-center gap-3">
+                <InputNumber
+                  min={1}
+                  max={60}
+                  placeholder="VD: 15"
+                  className="w-40 font-bold text-slate-900"
+                  value={plannedSessionsInput}
+                  onChange={(val) => setPlannedSessionsInput(val)}
+                  size="large"
+                />
+                <span className="text-xs font-medium text-slate-700">buổi điều trị</span>
+              </div>
               <span className="text-[11px] text-slate-400 block">
                 Bác sĩ có thể thiết lập số buổi dự kiến ngay khi chẩn đoán và chỉ định DVKT.
               </span>
