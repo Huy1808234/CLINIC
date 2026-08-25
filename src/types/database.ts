@@ -834,6 +834,16 @@ export interface Database {
           notes: string | null;
           created_at: string;
           updated_at: string;
+          checked_in_at: string | null;
+          checked_in_by: string | null;
+          started_at: string | null;
+          started_by: string | null;
+          completed_at: string | null;
+          completed_by: string | null;
+          no_show_at: string | null;
+          no_show_by: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
         };
         Insert: {
           id?: string;
@@ -852,6 +862,16 @@ export interface Database {
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
+          checked_in_at?: string | null;
+          checked_in_by?: string | null;
+          started_at?: string | null;
+          started_by?: string | null;
+          completed_at?: string | null;
+          completed_by?: string | null;
+          no_show_at?: string | null;
+          no_show_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
         };
         Update: {
           id?: string;
@@ -870,6 +890,16 @@ export interface Database {
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
+          checked_in_at?: string | null;
+          checked_in_by?: string | null;
+          started_at?: string | null;
+          started_by?: string | null;
+          completed_at?: string | null;
+          completed_by?: string | null;
+          no_show_at?: string | null;
+          no_show_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
         };
         Relationships: [];
       };

@@ -29,15 +29,25 @@ export async function getDayTimeline(dateStr: string): Promise<DayTimelineData> 
       priority,
       manual_override,
       notes,
+      treatment_session_plan_id,
       created_at,
       updated_at,
+      checked_in_at,
+      checked_in_by,
+      started_at,
+      started_by,
+      completed_at,
+      completed_by,
+      no_show_at,
+      no_show_by,
+      cancelled_at,
+      cancelled_by,
       patients(id, patient_code, full_name),
       treatment_courses(course_no),
       staff:doctor_id(full_name),
       appointment_steps(id, appointment_id, service_id, resource_id, staff_id, step_sequence, planned_duration_minutes, planned_start_at, planned_end_at, status)
     `)
     .eq("appointment_date", dateStr)
-    .neq("status", "CANCELLED")
     .order("scheduled_start_at", { ascending: true })
     .order("id", { ascending: true });
 
@@ -82,8 +92,19 @@ export async function getDayTimeline(dateStr: string): Promise<DayTimelineData> 
       priority: a.priority as number,
       manual_override: Boolean(a.manual_override),
       notes: a.notes as string | null,
+      treatment_session_plan_id: (a.treatment_session_plan_id as string) || null,
       created_at: a.created_at as string,
       updated_at: a.updated_at as string,
+      checked_in_at: (a.checked_in_at as string) || null,
+      checked_in_by: (a.checked_in_by as string) || null,
+      started_at: (a.started_at as string) || null,
+      started_by: (a.started_by as string) || null,
+      completed_at: (a.completed_at as string) || null,
+      completed_by: (a.completed_by as string) || null,
+      no_show_at: (a.no_show_at as string) || null,
+      no_show_by: (a.no_show_by as string) || null,
+      cancelled_at: (a.cancelled_at as string) || null,
+      cancelled_by: (a.cancelled_by as string) || null,
       patient_name: patient?.full_name || "Không rõ",
       patient_code: patient?.patient_code || "—",
       doctor_name: doctor?.full_name || null,

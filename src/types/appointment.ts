@@ -13,9 +13,19 @@ export interface Appointment {
   sequence_in_day: number | null;
   priority: number;
   manual_override: boolean;
-  notes: string | null;
+  treatment_session_plan_id?: string | null;
   created_at: string;
   updated_at: string;
+  checked_in_at?: string | null;
+  checked_in_by?: string | null;
+  started_at?: string | null;
+  started_by?: string | null;
+  completed_at?: string | null;
+  completed_by?: string | null;
+  no_show_at?: string | null;
+  no_show_by?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
 }
 
 export interface AppointmentStep {

@@ -206,20 +206,42 @@ export async function rescheduleAppointmentAction(input: RescheduleAppointmentIn
 
 const ALLOWED_STATUS_TRANSITIONS: Record<
   string,
-  { targetStatus: string; allowedRoles: ClinicRoleCode[] }
+  Array<{ targetStatus: string; allowedRoles: ClinicRoleCode[] }>
 > = {
-  PLANNED: {
-    targetStatus: "CHECKED_IN",
-    allowedRoles: ["RECEPTIONIST", "ADMIN"],
-  },
-  CHECKED_IN: {
-    targetStatus: "IN_TREATMENT",
-    allowedRoles: ["DOCTOR", "TECHNICIAN", "Y_SI"],
-  },
-  IN_TREATMENT: {
-    targetStatus: "COMPLETED",
-    allowedRoles: ["DOCTOR", "TECHNICIAN", "Y_SI"],
-  },
+  PLANNED: [
+    {
+      targetStatus: "CHECKED_IN",
+      allowedRoles: ["RECEPTIONIST", "ADMIN"],
+    },
+    {
+      targetStatus: "NO_SHOW",
+      allowedRoles: ["RECEPTIONIST", "ADMIN", "DOCTOR"],
+    },
+    {
+      targetStatus: "CANCELLED",
+      allowedRoles: ["RECEPTIONIST", "ADMIN"],
+    },
+  ],
+  CHECKED_IN: [
+    {
+      targetStatus: "IN_TREATMENT",
+      allowedRoles: ["DOCTOR", "TECHNICIAN", "Y_SI"],
+    },
+    {
+      targetStatus: "NO_SHOW",
+      allowedRoles: ["RECEPTIONIST", "ADMIN", "DOCTOR"],
+    },
+    {
+      targetStatus: "CANCELLED",
+      allowedRoles: ["RECEPTIONIST", "ADMIN"],
+    },
+  ],
+  IN_TREATMENT: [
+    {
+      targetStatus: "COMPLETED",
+      allowedRoles: ["DOCTOR", "TECHNICIAN", "Y_SI"],
+    },
+  ],
 };
 
 const RPC_ERROR_MAP: Record<string, string> = {
@@ -274,9 +296,10 @@ export async function updateAppointmentStatusAction(input: UpdateAppointmentStat
     // 4. Validate transition graph from current status to requested status
     const currentStatus = appt.status;
     const requestedStatus = validated.status;
-    const transitionRule = ALLOWED_STATUS_TRANSITIONS[currentStatus];
+    const availableTransitions = ALLOWED_STATUS_TRANSITIONS[currentStatus] || [];
+    const transitionRule = availableTransitions.find((t) => t.targetStatus === requestedStatus);
 
-    if (!transitionRule || transitionRule.targetStatus !== requestedStatus) {
+    if (!transitionRule) {
       return {
         success: false,
         error: `Chuyển đổi trạng thái không hợp lệ: không thể chuyển từ ${currentStatus} sang ${requestedStatus}.`,
@@ -346,8 +369,14 @@ export async function updateAppointmentStatusAction(input: UpdateAppointmentStat
       return { success: true, data: result };
     }
 
-    // Non-completion lightweight transitions (e.g. PLANNED -> CHECKED_IN, CHECKED_IN -> IN_TREATMENT)
-    const result = await updateAppointmentStatus(supabase, validated, accessContext.staff.id);
+    // Non-completion lightweight transitions (e.g. PLANNED -> CHECKED_IN, CHECKED_IN -> IN_TREATMENT, NO_SHOW, CANCELLED)
+    const user = await requireAuthenticatedUser();
+    const result = await updateAppointmentStatus(
+      supabase,
+      validated,
+      accessContext.staff.id,
+      user.id
+    );
     revalidatePath("/schedule");
     revalidatePath("/reception");
     return { success: true, data: result };

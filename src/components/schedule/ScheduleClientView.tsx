@@ -9,6 +9,7 @@ import { AutoScheduleModal } from "./AutoScheduleModal";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
+import { message } from "antd";
 import { useRealtimeSchedule } from "@/hooks/useRealtimeSchedule";
 import type { AppointmentWithDetails } from "@/types/appointment";
 import { autoScheduleAction, updateAppointmentStatusAction } from "@/app/actions/scheduling-actions";
@@ -139,6 +140,7 @@ export const ScheduleClientView: React.FC<ScheduleClientViewProps> = ({
             console.log("Appointment details:", appt);
           }}
           onStatusChange={async (apptId, newStatus) => {
+            const previousTimeline = timelineData;
             // Optimistic update
             setTimelineData((prev) => ({
               ...prev,
@@ -157,10 +159,18 @@ export const ScheduleClientView: React.FC<ScheduleClientViewProps> = ({
             }));
 
             // Call Server Action
-            await updateAppointmentStatusAction({
+            const res = await updateAppointmentStatusAction({
               appointment_id: apptId,
               status: newStatus,
             });
+
+            if (!res.success) {
+              // Rollback on failure
+              setTimelineData(previousTimeline);
+              message.error(res.error || "Không thể cập nhật trạng thái lịch hẹn.");
+            } else {
+              message.success("Cập nhật trạng thái thành công.");
+            }
           }}
         />
       )}

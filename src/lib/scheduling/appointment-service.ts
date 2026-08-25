@@ -93,6 +93,7 @@ export async function rescheduleAppointment(
 export async function updateAppointmentStatus(
   supabase: SupabaseClient<Database>,
   input: UpdateAppointmentStatusInput,
+  actorStaffId?: string,
   actorUserId?: string
 ) {
   if (input.status === "COMPLETED") {
@@ -111,13 +112,31 @@ export async function updateAppointmentStatus(
     throw new Error("Appointment not found.");
   }
 
+  const nowIso = new Date().toISOString();
+  const updatePayload: Database["public"]["Tables"]["appointments"]["Update"] = {
+    status: input.status,
+    notes: input.notes !== undefined ? input.notes : null,
+    updated_at: nowIso,
+  };
+
+  // Stamp specific transition timestamp and provenance actor
+  if (input.status === "CHECKED_IN") {
+    updatePayload.checked_in_at = nowIso;
+    if (actorStaffId) updatePayload.checked_in_by = actorStaffId;
+  } else if (input.status === "IN_TREATMENT") {
+    updatePayload.started_at = nowIso;
+    if (actorStaffId) updatePayload.started_by = actorStaffId;
+  } else if (input.status === "NO_SHOW") {
+    updatePayload.no_show_at = nowIso;
+    if (actorStaffId) updatePayload.no_show_by = actorStaffId;
+  } else if (input.status === "CANCELLED") {
+    updatePayload.cancelled_at = nowIso;
+    if (actorStaffId) updatePayload.cancelled_by = actorStaffId;
+  }
+
   const { data: updated, error: updateError } = await supabase
     .from("appointments")
-    .update({
-      status: input.status,
-      notes: input.notes !== undefined ? input.notes : null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", input.appointment_id)
     .select()
     .single();
