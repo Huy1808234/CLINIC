@@ -76,8 +76,8 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     .order("registered_at", { ascending: false })
     .limit(5);
 
-  // 7. Clinical notes history (Doctor observations, newest first)
-  const { data: clinicalNotes } = await supabase
+  // 7. Recent clinical notes (Doctor observations, bounded to latest 4 rows for main card + total count)
+  const { data: clinicalNotes, count: totalClinicalNotesCount } = await supabase
     .from("clinical_notes")
     .select(`
       id,
@@ -92,9 +92,10 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
       updated_at,
       staff:author_staff_id(full_name),
       treatment_courses:treatment_course_id(course_no)
-    `)
+    `, { count: "exact" })
     .eq("patient_id", patientId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(4);
 
   const formattedCourses = ((courses as unknown as Array<Record<string, unknown>>) || []).map((c) => {
     const doctorName = (c.staff as { full_name?: string } | null)?.full_name || null;
@@ -214,5 +215,6 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     recent_appointments: formattedAppointments,
     recent_receptions: formattedReceptions,
     clinical_notes: formattedClinicalNotes,
+    clinical_notes_total_count: totalClinicalNotesCount ?? formattedClinicalNotes.length,
   };
 }

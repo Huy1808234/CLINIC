@@ -100,6 +100,7 @@ export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
           <PatientNotesCard
             notes={latestReception?.notes}
             clinicalNotes={clinical_notes}
+            totalNotesCount={history.clinical_notes_total_count}
             isDoctor={isDoctor}
             patientId={patient.id}
             patientName={patient.full_name}

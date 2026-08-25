@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { Button, Tag, Drawer } from "antd";
+import React, { useState, useCallback } from "react";
+import { Button, Tag, Drawer, Pagination, Spin, Alert } from "antd";
 import {
   FormOutlined,
   PlusOutlined,
@@ -10,12 +10,14 @@ import {
 } from "@ant-design/icons";
 import { SectionCard, SectionCardHeader, EmptyStatePanel } from "./SectionCard";
 import { AddClinicalNoteModal } from "./AddClinicalNoteModal";
+import { getPatientClinicalNotesPageAction } from "@/app/actions/clinical-notes-actions";
 import type { ClinicalNoteItem } from "@/types/patient";
 import { DEFAULT_CLINIC_TIMEZONE } from "@/utils/timezone";
 
 export interface PatientNotesCardProps {
   notes?: string | null;
   clinicalNotes?: ClinicalNoteItem[];
+  totalNotesCount?: number;
   isDoctor?: boolean;
   patientId?: string;
   patientName?: string;
@@ -31,6 +33,7 @@ export interface PatientNotesCardProps {
 export const PatientNotesCard: React.FC<PatientNotesCardProps> = ({
   notes,
   clinicalNotes = [],
+  totalNotesCount = 0,
   isDoctor = false,
   patientId = "",
   patientName = "",
@@ -46,8 +49,18 @@ export const PatientNotesCard: React.FC<PatientNotesCardProps> = ({
   const [isViewAllDrawerOpen, setIsViewAllDrawerOpen] = useState<boolean>(false);
   const [addedNotes, setAddedNotes] = useState<ClinicalNoteItem[]>([]);
 
+  // Drawer lazy-loading state
+  const [drawerNotes, setDrawerNotes] = useState<ClinicalNoteItem[]>([]);
+  const [drawerTotal, setDrawerTotal] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [isLoadingDrawer, setIsLoadingDrawer] = useState<boolean>(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+
   const handleNoteCreated = (newNote: ClinicalNoteItem) => {
     setAddedNotes((prev) => [newNote, ...prev.filter((n) => n.id !== newNote.id)]);
+    // If drawer has loaded notes, also prepend to drawer
+    setDrawerNotes((prev) => [newNote, ...prev.filter((n) => n.id !== newNote.id)]);
+    setDrawerTotal((prev) => prev + 1);
     onAddNoteSuccess?.(newNote);
   };
 
@@ -55,6 +68,44 @@ export const PatientNotesCard: React.FC<PatientNotesCardProps> = ({
     ...addedNotes,
     ...clinicalNotes.filter((n) => !addedNotes.some((a) => a.id === n.id)),
   ];
+
+  const displayedNotes = allNotes.slice(0, 3);
+  const totalCount = Math.max(totalNotesCount, allNotes.length, drawerTotal);
+  const hasMoreNotes = totalCount > 3;
+
+  const fetchDrawerNotes = useCallback(
+    async (page: number) => {
+      if (!patientId) return;
+      setIsLoadingDrawer(true);
+      setDrawerError(null);
+      try {
+        const res = await getPatientClinicalNotesPageAction({
+          patientId,
+          page,
+          pageSize: 20,
+        });
+
+        if (res.success && res.notes) {
+          setDrawerNotes(res.notes);
+          setDrawerTotal(res.total || 0);
+          setCurrentPage(page);
+        } else {
+          setDrawerError(res.error || "Không thể tải danh sách ghi chú.");
+        }
+      } catch (err: unknown) {
+        console.error("fetchDrawerNotes error:", err);
+        setDrawerError("Đã xảy ra lỗi khi tải ghi chú.");
+      } finally {
+        setIsLoadingDrawer(false);
+      }
+    },
+    [patientId]
+  );
+
+  const handleOpenDrawer = () => {
+    setIsViewAllDrawerOpen(true);
+    fetchDrawerNotes(1);
+  };
 
   const formatTimestamp = (dateStr: string) => {
     try {
@@ -71,9 +122,6 @@ export const PatientNotesCard: React.FC<PatientNotesCardProps> = ({
       return dateStr;
     }
   };
-
-  const displayedNotes = allNotes.slice(0, 3);
-  const hasMoreNotes = allNotes.length > 3;
 
   return (
     <>
@@ -160,10 +208,10 @@ export const PatientNotesCard: React.FC<PatientNotesCardProps> = ({
                   <Button
                     type="link"
                     size="small"
-                    onClick={() => setIsViewAllDrawerOpen(true)}
+                    onClick={handleOpenDrawer}
                     className="text-xs text-[#00897b] font-semibold hover:text-teal-800 p-0"
                   >
-                    Xem tất cả ghi chú ({allNotes.length})
+                    Xem tất cả ghi chú ({totalCount})
                   </Button>
                 </div>
               )}
@@ -189,52 +237,81 @@ export const PatientNotesCard: React.FC<PatientNotesCardProps> = ({
         />
       )}
 
-      {/* View All Notes Drawer */}
+      {/* View All Notes Drawer (On-demand paginated history) */}
       <Drawer
         title={
           <div className="flex items-center gap-2 text-slate-800 font-bold text-base">
             <FormOutlined className="text-[#00897b]" />
-            <span>Toàn bộ ghi chú lâm sàng ({allNotes.length})</span>
+            <span>Toàn bộ ghi chú lâm sàng ({drawerTotal || totalCount})</span>
           </div>
         }
         placement="right"
-        width={480}
+        width={500}
         open={isViewAllDrawerOpen}
         onClose={() => setIsViewAllDrawerOpen(false)}
       >
-        <div className="space-y-4">
-          {allNotes.map((note) => (
-            <div
-              key={note.id}
-              className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2"
-            >
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5">
-                  <UserOutlined className="text-teal-600" />
-                  <span className="font-bold text-slate-800">
-                    {note.author_name.startsWith("BS")
-                      ? note.author_name
-                      : `BS ${note.author_name}`}
-                  </span>
-                </div>
-                <span className="font-mono text-[11px] text-slate-400">
-                  {formatTimestamp(note.created_at)}
-                </span>
+        <div className="space-y-4 flex flex-col h-full">
+          {isLoadingDrawer ? (
+            <div className="py-12 text-center">
+              <Spin tip="Đang tải danh sách ghi chú..." />
+            </div>
+          ) : drawerError ? (
+            <Alert type="error" message={drawerError} showIcon />
+          ) : drawerNotes.length === 0 ? (
+            <div className="text-center text-xs text-slate-400 py-8 italic">
+              Không có ghi chú nào.
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4 flex-1 overflow-y-auto pr-1">
+                {drawerNotes.map((note) => (
+                  <div
+                    key={note.id}
+                    className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2 shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <UserOutlined className="text-teal-600" />
+                        <span className="font-bold text-slate-800">
+                          {note.author_name.startsWith("BS")
+                            ? note.author_name
+                            : `BS ${note.author_name}`}
+                        </span>
+                      </div>
+                      <span className="font-mono text-[11px] text-slate-400">
+                        {formatTimestamp(note.created_at)}
+                      </span>
+                    </div>
+
+                    {note.course_no && (
+                      <div>
+                        <Tag color="cyan" className="m-0 text-[10px] font-medium px-1.5 py-0 rounded">
+                          Liệu trình {note.course_no}
+                        </Tag>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-slate-700 leading-relaxed m-0 whitespace-pre-wrap">
+                      {note.content}
+                    </p>
+                  </div>
+                ))}
               </div>
 
-              {note.course_no && (
-                <div>
-                  <Tag color="cyan" className="m-0 text-[10px] font-medium px-1.5 py-0 rounded">
-                    Liệu trình {note.course_no}
-                  </Tag>
+              {drawerTotal > 20 && (
+                <div className="pt-3 border-t border-slate-200 flex justify-center shrink-0">
+                  <Pagination
+                    size="small"
+                    current={currentPage}
+                    total={drawerTotal}
+                    pageSize={20}
+                    onChange={(page) => fetchDrawerNotes(page)}
+                    showSizeChanger={false}
+                  />
                 </div>
               )}
-
-              <p className="text-xs text-slate-700 leading-relaxed m-0 whitespace-pre-wrap">
-                {note.content}
-              </p>
-            </div>
-          ))}
+            </>
+          )}
         </div>
       </Drawer>
     </>

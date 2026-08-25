@@ -143,6 +143,7 @@ export interface PatientHistorySummary {
   }[];
   recent_receptions?: PatientReceptionSummaryItem[];
   clinical_notes?: ClinicalNoteItem[];
+  clinical_notes_total_count?: number;
 }
 
 export type PatientTreatmentCourseSummaryItem = PatientHistorySummary["treatment_courses"][number];

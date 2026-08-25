@@ -122,7 +122,8 @@ export function runDoctorClinicalNotes1Tests() {
     "PatientNotesCard conditionally displays '+ Thêm ghi chú' button for Doctors (NOTE-1)"
   );
   assert.ok(
-    notesCardCode.includes("displayedNotes = localNotes.slice(0, 3)") &&
+    (notesCardCode.includes("displayedNotes = allNotes.slice(0, 3)") ||
+      notesCardCode.includes("displayedNotes = localNotes.slice(0, 3)")) &&
       notesCardCode.includes("Xem tất cả ghi chú"),
     "PatientNotesCard limits main card display to top 3 notes with expand drawer"
   );
