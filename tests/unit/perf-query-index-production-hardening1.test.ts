@@ -24,6 +24,7 @@ export function runPerfQueryIndexProductionHardening1Tests() {
   const diagServicePath = path.join(process.cwd(), "src", "lib", "master-data", "diagnosis-catalog-service.ts");
   const homePagePath = path.join(process.cwd(), "src", "app", "page.tsx");
   const migration41Path = path.join(process.cwd(), "supabase", "migrations", "20260825000041_production_performance_indexes.sql");
+  const migration42Path = path.join(process.cwd(), "supabase", "migrations", "20260825000042_performance_index_corrections.sql");
 
   // Verify file existence
   assert.ok(fs.existsSync(authResolverPath), "auth-resolver.ts exists");
@@ -44,6 +45,7 @@ export function runPerfQueryIndexProductionHardening1Tests() {
   assert.ok(fs.existsSync(diagServicePath), "diagnosis-catalog-service.ts exists");
   assert.ok(fs.existsSync(homePagePath), "app/page.tsx exists");
   assert.ok(fs.existsSync(migration41Path), "migration 41 exists");
+  assert.ok(fs.existsSync(migration42Path), "migration 42 exists");
 
   const authCode = fs.readFileSync(authResolverPath, "utf-8");
   const staffResolverCode = fs.readFileSync(staffResolverPath, "utf-8");
