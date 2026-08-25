@@ -463,7 +463,7 @@ export const DoctorClinicalCourseCard: React.FC<DoctorClinicalCourseCardProps> =
           </div>
         }
         placement="right"
-        width={760}
+        size={760}
         destroyOnHidden
         onClose={() => setIsDrawerOpen(false)}
         open={isDrawerOpen}

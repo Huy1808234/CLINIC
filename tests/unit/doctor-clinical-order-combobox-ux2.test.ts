@@ -170,7 +170,8 @@ export function runDoctorClinicalOrderComboboxUx2Tests() {
 
   // DVKT-COMBO-19: Save button not overlapped by floating avatar
   assert.ok(
-    drawerCode.includes("width={760}") && cardCode.includes("width={760}"),
+    (drawerCode.includes("size={760}") || drawerCode.includes("width={760}")) &&
+      (cardCode.includes("size={760}") || cardCode.includes("width={760}")),
     "DVKT-COMBO-19: Standard 760px desktop drawer with full viewport height and high z-index portal"
   );
 

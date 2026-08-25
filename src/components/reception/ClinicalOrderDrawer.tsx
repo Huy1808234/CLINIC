@@ -474,7 +474,7 @@ export const ClinicalOrderDrawer: React.FC<ClinicalOrderDrawerProps> = ({
       open={isOpen}
       onClose={onClose}
       destroyOnHidden
-      width={760}
+      size={760}
       className="clinical-order-drawer"
       styles={{
         header: {

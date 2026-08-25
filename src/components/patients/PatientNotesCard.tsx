@@ -246,7 +246,7 @@ export const PatientNotesCard: React.FC<PatientNotesCardProps> = ({
           </div>
         }
         placement="right"
-        width={500}
+        size={500}
         open={isViewAllDrawerOpen}
         onClose={() => setIsViewAllDrawerOpen(false)}
       >
