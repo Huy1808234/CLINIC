@@ -6,6 +6,18 @@ import { normalizeCccd } from "@/utils/normalize-cccd";
 import { normalizeBhyt } from "@/utils/normalize-bhyt";
 import { removeVietnameseAccents } from "@/utils/format-person-name";
 
+export async function getRecentPatients(limit: number = 50): Promise<PatientProfile[]> {
+  const supabase = await createClient();
+  const { data: patients } = await supabase
+    .from("patients")
+    .select("id")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (!patients || patients.length === 0) return [];
+  return fetchProfilesByIds(supabase, (patients as unknown as Array<{ id: string }>).map((p) => p.id));
+}
+
 export async function searchPatients(queryStr: string, limit: number = 20): Promise<PatientProfile[]> {
   if (!queryStr || !queryStr.trim()) {
     return [];

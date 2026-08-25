@@ -1,19 +1,31 @@
 import "server-only";
 import { createClient } from "@/supabase-clients/server";
+import { getActiveClinicContext } from "@/lib/auth/clinic-context";
+import { getClinicTodayDate, getUtcBoundsForClinicDate, DEFAULT_CLINIC_TIMEZONE } from "@/utils/timezone";
 import type { ReceptionQueueItem, ReceptionEncounter } from "@/types/reception";
 import type { PatientProfile, Patient, PatientInsuranceCard } from "@/types/patient";
 
-export async function getTodayReceptions(): Promise<ReceptionQueueItem[]> {
+export async function getTodayReceptions(targetDate?: string): Promise<ReceptionQueueItem[]> {
   const supabase = await createClient();
+  const clinicContext = await getActiveClinicContext();
+  const clinicId = clinicContext?.id;
+  const timeZone = clinicContext?.timezone || DEFAULT_CLINIC_TIMEZONE;
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const dateToFetch = targetDate || getClinicTodayDate(timeZone);
+  const { startUtc, endUtc } = getUtcBoundsForClinicDate(dateToFetch, timeZone);
 
-  const { data: receptions, error } = await supabase
+  let query = supabase
     .from("receptions")
     .select("*")
-    .gte("arrived_at", todayStart.toISOString())
+    .gte("arrived_at", startUtc)
+    .lt("arrived_at", endUtc)
     .order("arrived_at", { ascending: false });
+
+  if (clinicId) {
+    query = query.eq("clinic_id", clinicId);
+  }
+
+  const { data: receptions, error } = await query;
 
   if (error || !receptions) {
     return [];

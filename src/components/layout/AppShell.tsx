@@ -2,13 +2,16 @@ import React from "react";
 import { redirect } from "next/navigation";
 import { requireApplicationAccessContext } from "@/lib/auth/application-access";
 import { AuthenticationRequiredError } from "@/lib/auth/auth-resolver";
-import { StaffNotLinkedError, StaffInactiveError, AccountSetupRequiredError } from "@/lib/auth/staff-resolver";
+import { StaffNotLinkedError, StaffInactiveError } from "@/lib/auth/staff-resolver";
 import { NoActiveClinicSelectedError } from "@/lib/auth/clinic-context";
-import { StaffClinicAccessDeniedError } from "@/lib/auth/role-resolver";
+import {
+  StaffClinicAccessDeniedError,
+  getCurrentStaffRolesForClinic,
+} from "@/lib/auth/role-resolver";
 import { StaffNoActiveClinicError } from "@/lib/auth/clinic-resolver";
 import { AccessDeniedView } from "@/components/auth/AccessDeniedView";
-import { Sidebar } from "./Sidebar";
-import { Header } from "./Header";
+import type { ClinicRoleCode } from "@/types/clinic";
+import { ClientAppLayout } from "./ClientAppLayout";
 
 export interface AppShellProps {
   title?: string;
@@ -22,7 +25,6 @@ export interface AppShellProps {
  * (authenticated user + active staff + verified active clinic selection).
  *
  * Specific Error Handling:
- * - Password setup required -> redirect to /auth/setup-password
  * - No active clinic / Clinic access denied / Zero active clinics -> redirect to /select-clinic
  * - Staff not linked -> renders AccessDeniedView(code="STAFF_NOT_LINKED") with Logout available
  * - Staff inactive -> renders AccessDeniedView(code="STAFF_INACTIVE") with Logout available
@@ -30,13 +32,13 @@ export interface AppShellProps {
  * - Unknown errors -> re-thrown to application error boundary
  */
 export async function AppShell({ title, subtitle, actions, children }: AppShellProps) {
-  try {
-    await requireApplicationAccessContext();
-  } catch (error: unknown) {
-    if (error instanceof AccountSetupRequiredError) {
-      redirect("/auth/setup-password");
-    }
+  let accessContext;
+  let activeRoles: ClinicRoleCode[] = [];
 
+  try {
+    accessContext = await requireApplicationAccessContext();
+    activeRoles = await getCurrentStaffRolesForClinic(accessContext.clinic.clinic_id);
+  } catch (error: unknown) {
     if (
       error instanceof NoActiveClinicSelectedError ||
       error instanceof StaffClinicAccessDeniedError ||
@@ -62,12 +64,19 @@ export async function AppShell({ title, subtitle, actions, children }: AppShellP
   }
 
   return (
-    <div className="min-h-screen flex bg-slate-50 text-slate-900">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <Header title={title} subtitle={subtitle} actions={actions} />
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto">{children}</main>
-      </div>
-    </div>
+    <ClientAppLayout
+      currentStaff={accessContext.staff}
+      activeClinic={{
+        clinic_id: accessContext.clinic.clinic_id,
+        clinic_code: accessContext.clinic.clinic_code,
+        name: accessContext.clinic.clinic_name,
+      }}
+      activeRoles={activeRoles}
+      title={title}
+      subtitle={subtitle}
+      actions={actions}
+    >
+      {children}
+    </ClientAppLayout>
   );
 }

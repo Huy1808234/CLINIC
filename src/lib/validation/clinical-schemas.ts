@@ -39,3 +39,29 @@ export const establishInitialTreatmentPlanSchema = z.object({
 
 export type EstablishInitialTreatmentPlanInput = z.input<typeof establishInitialTreatmentPlanSchema>;
 export type EstablishInitialTreatmentPlanParsed = z.output<typeof establishInitialTreatmentPlanSchema>;
+
+export const orderCourseServicesSchema = z.object({
+  treatment_course_id: uuidSchema,
+  service_ids: z
+    .array(uuidSchema)
+    .min(1, "Vui lòng chọn ít nhất một dịch vụ kỹ thuật (DVKT)."),
+  notes: z.string().optional().nullable(),
+});
+
+export type OrderCourseServicesInput = z.input<typeof orderCourseServicesSchema>;
+export type OrderCourseServicesParsed = z.output<typeof orderCourseServicesSchema>;
+
+export const saveTreatmentSessionPlanSchema = z.object({
+  treatment_course_id: uuidSchema,
+  session_number: z
+    .number()
+    .int("Số thứ tự buổi phải là số nguyên")
+    .min(1, "Số thứ tự buổi điều trị phải lớn hơn 0"),
+  service_ids: z
+    .array(uuidSchema)
+    .min(1, "Vui lòng chọn ít nhất một dịch vụ kỹ thuật cho buổi điều trị."),
+  notes: z.string().optional().nullable(),
+});
+
+export type SaveTreatmentSessionPlanInput = z.input<typeof saveTreatmentSessionPlanSchema>;
+export type SaveTreatmentSessionPlanParsed = z.output<typeof saveTreatmentSessionPlanSchema>;

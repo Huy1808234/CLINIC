@@ -1,17 +1,26 @@
 import "server-only";
 import { createClient } from "@/supabase-clients/server";
+import { getActiveClinicContext } from "@/lib/auth/clinic-context";
+import { getClinicTodayDate, DEFAULT_CLINIC_TIMEZONE } from "@/utils/timezone";
 import type { MonthMatrixData, MonthMatrixDoctorBlock, MonthMatrixPatientRow, MonthMatrixCell } from "@/types/schedule";
 import type { Patient } from "@/types/patient";
-import { formatTimeVN } from "@/utils/format-time";
+import { formatTimestampTime } from "@/utils/format-time";
 
-export async function getMonthScheduleMatrix(monthStr: string): Promise<MonthMatrixData> {
-  // monthStr is expected to be in "YYYY-MM" format (e.g. "2026-08")
-  const parts = monthStr.split("-");
-  const year = parseInt(parts[0], 10) || new Date().getFullYear();
-  const month = parseInt(parts[1], 10) || (new Date().getMonth() + 1);
+export async function getMonthScheduleMatrix(monthStr?: string): Promise<MonthMatrixData> {
+  const clinicContext = await getActiveClinicContext();
+  const clinicTimezone = clinicContext?.timezone || DEFAULT_CLINIC_TIMEZONE;
+
+  // Determine canonical clinic month (YYYY-MM)
+  const targetMonthStr = monthStr && /^\d{4}-\d{2}$/.test(monthStr)
+    ? monthStr
+    : getClinicTodayDate(clinicTimezone).slice(0, 7);
+
+  const parts = targetMonthStr.split("-");
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
 
   // Compute days in month
-  const daysInMonth = new Date(year, month, 0).getDate();
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
   const endDate = `${year}-${String(month).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
 
@@ -90,12 +99,8 @@ export async function getMonthScheduleMatrix(monthStr: string): Promise<MonthMat
       const row = courseMap.get(courseId)!;
       const dayNum = parseInt((appt.appointment_date as string).split("-")[2], 10);
 
-      // Extract time from scheduled_start_at ISO string
-      let timeStr = "";
-      if (appt.scheduled_start_at) {
-        const timePart = (appt.scheduled_start_at as string).split("T")[1]?.slice(0, 5);
-        timeStr = formatTimeVN(timePart);
-      }
+      // Extract time in clinic timezone
+      const timeStr = formatTimestampTime(appt.scheduled_start_at as string, clinicTimezone);
 
       row.cells[dayNum] = {
         appointment_id: appt.id as string,
@@ -116,7 +121,7 @@ export async function getMonthScheduleMatrix(monthStr: string): Promise<MonthMat
   });
 
   return {
-    month_str: monthStr,
+    month_str: targetMonthStr,
     days_in_month: daysInMonth,
     doctor_blocks: doctorBlocks,
   };

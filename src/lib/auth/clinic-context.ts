@@ -33,6 +33,7 @@ export interface ActiveClinicIdentity {
   organization_id: string;
   is_primary: boolean;
   membership_id: string;
+  timezone: string;
 }
 
 /**
@@ -82,6 +83,7 @@ export async function setActiveClinicCookie(clinicId: string): Promise<ActiveCli
     organization_id: matched.organization_id,
     is_primary: matched.is_primary,
     membership_id: matched.membership_id,
+    timezone: matched.timezone || "Asia/Ho_Chi_Minh",
   };
 }
 
@@ -113,6 +115,7 @@ export async function getActiveClinicContext(): Promise<ActiveClinicIdentity | n
     organization_id: matched.organization_id,
     is_primary: matched.is_primary,
     membership_id: matched.membership_id,
+    timezone: matched.timezone || "Asia/Ho_Chi_Minh",
   };
 }
 
@@ -150,6 +153,7 @@ export async function requireActiveClinic(): Promise<ActiveClinicIdentity> {
     organization_id: matched.organization_id,
     is_primary: matched.is_primary,
     membership_id: matched.membership_id,
+    timezone: matched.timezone || "Asia/Ho_Chi_Minh",
   };
 }
 

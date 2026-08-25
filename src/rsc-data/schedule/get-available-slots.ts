@@ -1,9 +1,11 @@
 import "server-only";
 import { createClient } from "@/supabase-clients/server";
+import { getActiveClinicContext } from "@/lib/auth/clinic-context";
+import { DEFAULT_CLINIC_TIMEZONE } from "@/utils/timezone";
 import type { AvailableSlotItem } from "@/types/schedule";
 import { generateDailyTimeSlots, minutesToTime, timeToMinutes } from "@/lib/scheduling/generate-slots";
 import { calculateSlotScore } from "@/lib/scheduling/slot-scoring";
-import { formatTimeVN } from "@/utils/format-time";
+import { formatTimestampTime } from "@/utils/format-time";
 
 export async function getAvailableSlotsForDoctor(params: {
   doctorId: string;
@@ -11,6 +13,8 @@ export async function getAvailableSlotsForDoctor(params: {
   preferredTime?: string | null;
 }): Promise<AvailableSlotItem[]> {
   const supabase = await createClient();
+  const clinicContext = await getActiveClinicContext();
+  const clinicTimezone = clinicContext?.timezone || DEFAULT_CLINIC_TIMEZONE;
 
   // 1. Fetch appointments for this doctor on this date
   const { data: existingAppts } = await supabase
@@ -23,12 +27,14 @@ export async function getAvailableSlotsForDoctor(params: {
   const bookedSlots = new Set<string>();
   for (const a of existingAppts || []) {
     if (a.scheduled_start_at) {
-      const timePart = (a.scheduled_start_at as string).split("T")[1]?.slice(0, 5);
-      bookedSlots.add(formatTimeVN(timePart));
+      const localTimeStr = formatTimestampTime(a.scheduled_start_at, clinicTimezone);
+      if (localTimeStr && localTimeStr !== "—") {
+        bookedSlots.add(localTimeStr);
+      }
     }
   }
 
-  // 2. Generate all candidate slots
+  // 2. Generate all candidate slots in clinic wall-clock time
   const allSlots = generateDailyTimeSlots({
     openTime: "07:00",
     closeTime: "17:00",

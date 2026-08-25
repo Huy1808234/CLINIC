@@ -27,6 +27,7 @@ export interface StaffClinicMembershipIdentity {
   clinic_name: string;
   organization_id: string;
   is_primary: boolean;
+  timezone: string;
 }
 
 /**
@@ -62,6 +63,7 @@ export async function getCurrentStaffClinicMemberships(): Promise<StaffClinicMem
           organization_id,
           clinic_code,
           name,
+          timezone,
           is_active
         )
       `)
@@ -81,6 +83,7 @@ export async function getCurrentStaffClinicMemberships(): Promise<StaffClinicMem
         organization_id: string;
         clinic_code: string;
         name: string;
+        timezone?: string | null;
         is_active: boolean;
       } | null;
 
@@ -93,7 +96,8 @@ export async function getCurrentStaffClinicMemberships(): Promise<StaffClinicMem
           clinic_code: clinic.clinic_code,
           clinic_name: clinic.name,
           organization_id: clinic.organization_id,
-          is_primary: row.is_primary,
+          is_primary: row.is_primary ?? false,
+          timezone: clinic.timezone || "Asia/Ho_Chi_Minh",
         });
       }
     }

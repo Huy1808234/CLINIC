@@ -1,13 +1,18 @@
 import React from "react";
 import { AppShell } from "@/components/layout/AppShell";
+import { getActiveClinicContext } from "@/lib/auth/clinic-context";
+import { getClinicTodayDate, DEFAULT_CLINIC_TIMEZONE } from "@/utils/timezone";
 import { getMonthScheduleMatrix } from "@/rsc-data/schedule/get-month-schedule";
 import { getDayTimeline } from "@/rsc-data/schedule/get-day-schedule";
 import { getCatalogs } from "@/rsc-data/treatment/get-catalogs";
 import { ScheduleClientView } from "@/components/schedule/ScheduleClientView";
 
 export default async function SchedulePage() {
-  const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
-  const todayDate = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const clinicContext = await getActiveClinicContext();
+  const clinicTimezone = clinicContext?.timezone || DEFAULT_CLINIC_TIMEZONE;
+
+  const todayDate = getClinicTodayDate(clinicTimezone); // "YYYY-MM-DD"
+  const currentMonth = todayDate.slice(0, 7); // "YYYY-MM"
 
   const [matrixData, timelineData, catalogs] = await Promise.all([
     getMonthScheduleMatrix(currentMonth),
@@ -25,6 +30,8 @@ export default async function SchedulePage() {
           initialMatrix={matrixData}
           initialTimeline={timelineData}
           doctors={catalogs.doctors}
+          clinicTodayDate={todayDate}
+          clinicTimezone={clinicTimezone}
         />
       </div>
     </AppShell>

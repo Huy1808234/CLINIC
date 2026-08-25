@@ -6,12 +6,15 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
 import type { AutoScheduleInput, AutoScheduleResult } from "@/types/schedule";
+import { getClinicTodayDate, DEFAULT_CLINIC_TIMEZONE } from "@/utils/timezone";
 
 export interface AutoScheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
   courseId: string;
   defaultDoctorId?: string;
+  defaultStartDate?: string;
+  clinicTimezone?: string;
   doctors: Array<{ id: string; name: string; code: string }>;
   plannedSessionCount?: number | null;
   completedSessionCount?: number | null;
@@ -24,6 +27,8 @@ export const AutoScheduleModal: React.FC<AutoScheduleModalProps> = ({
   onClose,
   courseId,
   defaultDoctorId,
+  defaultStartDate,
+  clinicTimezone = DEFAULT_CLINIC_TIMEZONE,
   doctors,
   plannedSessionCount,
   completedSessionCount,
@@ -47,7 +52,9 @@ export const AutoScheduleModal: React.FC<AutoScheduleModalProps> = ({
       : 1;
 
   const [doctorId, setDoctorId] = useState<string>(defaultDoctorId || doctors[0]?.id || "");
-  const [startDate, setStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState<string>(
+    defaultStartDate || getClinicTodayDate(clinicTimezone)
+  );
   const [scheduleCount, setScheduleCount] = useState<number>(initialScheduleCount);
   const [preferredTime, setPreferredTime] = useState<string>("07:30");
   const [isLoading, setIsLoading] = useState<boolean>(false);

@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/supabase-clients/admin";
-import { processReceptionIntake } from "@/lib/reception/reception-service";
+import {
+  processReceptionIntake,
+  ReceptionIntakeError,
+} from "@/lib/reception/reception-service";
 import {
   validateDoctorForClinic,
   InvalidDoctorTargetError,
@@ -15,6 +18,7 @@ import {
   AuthenticationRequiredError,
 } from "@/lib/auth/auth-resolver";
 import {
+  requireCurrentStaff,
   StaffNotLinkedError,
   StaffInactiveError,
 } from "@/lib/auth/staff-resolver";
@@ -36,7 +40,10 @@ export async function submitReceptionAction(input: CreateReceptionInput) {
     const authContext = await requireActionAuthorization({
       requiredRoles: ["RECEPTIONIST", "ADMIN"],
     });
+    const staff = await requireCurrentStaff();
     const activeClinicId = authContext.access.clinic.clinic_id;
+    const actorStaffId = staff.id;
+    const actorUserId = staff.user_id;
 
     const supabase = createAdminClient();
 
@@ -45,11 +52,13 @@ export async function submitReceptionAction(input: CreateReceptionInput) {
       await validateDoctorForClinic(supabase, validated.doctor_id, activeClinicId);
     }
 
-    // 4. Privileged intake execution with verified clinic ownership
+    // 4. Privileged atomic intake execution with verified clinic & actor ownership
     const result = await processReceptionIntake(
       supabase,
       validated,
-      activeClinicId
+      activeClinicId,
+      actorStaffId,
+      actorUserId
     );
 
     revalidatePath("/reception");
@@ -57,6 +66,12 @@ export async function submitReceptionAction(input: CreateReceptionInput) {
     revalidatePath("/patients");
     return { success: true, data: result };
   } catch (error: unknown) {
+    if (error instanceof ReceptionIntakeError) {
+      return {
+        success: false,
+        error: error.message || "Lỗi tiếp nhận bệnh nhân.",
+      };
+    }
     if (error instanceof InvalidDoctorTargetError) {
       return {
         success: false,

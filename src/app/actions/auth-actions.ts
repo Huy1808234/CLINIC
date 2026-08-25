@@ -1,6 +1,6 @@
 "use server";
 
-import { signInWithEmailPassword, type SignInResult } from "@/lib/auth/sign-in";
+import { signInWithUsernamePassword, type SignInResult } from "@/lib/auth/sign-in";
 import { signOutCurrentUser, type SignOutResult } from "@/lib/auth/sign-out";
 import {
   setActiveClinicCookie,
@@ -26,14 +26,14 @@ import { AuthenticationRequiredError } from "@/lib/auth/auth-resolver";
 import { ZodError } from "zod";
 
 /**
- * Server Action for email/password authentication.
- * Delegates to the centralized signInWithEmailPassword resolver.
+ * Server Action for Staff username/password authentication.
+ * Delegates to the centralized signInWithUsernamePassword resolver.
  *
- * @param input Email and password.
+ * @param input Username and password.
  * @returns Typed `SignInResult`.
  */
 export async function signInAction(input: SignInInput): Promise<SignInResult> {
-  return await signInWithEmailPassword(input);
+  return await signInWithUsernamePassword(input);
 }
 
 /**

@@ -104,4 +104,84 @@ export const setupStaffPasswordSchema = z
 
 export type SetupStaffPasswordInput = z.infer<typeof setupStaffPasswordSchema>;
 
+export const adminResetStaffPasswordSchema = z
+  .object({
+    staff_id: uuidSchema,
+    password: z
+      .string()
+      .min(8, "Mật khẩu phải có ít nhất 8 ký tự.")
+      .max(100, "Mật khẩu không được vượt quá 100 ký tự."),
+    confirm_password: z.string().min(1, "Vui lòng xác nhận mật khẩu."),
+  })
+  .refine((data) => data.password === data.confirm_password, {
+    message: "Mật khẩu xác nhận không khớp.",
+    path: ["confirm_password"],
+  });
+
+export type AdminResetStaffPasswordInput = z.infer<typeof adminResetStaffPasswordSchema>;
+export type AdminResetStaffPasswordParsed = z.output<typeof adminResetStaffPasswordSchema>;
+
+export const resetStaffPasswordByAdminSchema = z
+  .object({
+    staff_id: uuidSchema,
+    new_password: z
+      .string()
+      .min(8, "Mật khẩu phải có ít nhất 8 ký tự.")
+      .max(100, "Mật khẩu không được vượt quá 100 ký tự."),
+    confirm_password: z.string().min(1, "Vui lòng xác nhận mật khẩu."),
+  })
+  .refine((data) => data.new_password === data.confirm_password, {
+    message: "Mật khẩu xác nhận không khớp.",
+    path: ["confirm_password"],
+  });
+
+export type ResetStaffPasswordByAdminInput = z.infer<typeof resetStaffPasswordByAdminSchema>;
+export type ResetStaffPasswordByAdminParsed = z.output<typeof resetStaffPasswordByAdminSchema>;
+
+export const provisionStaffDirectCredentialsSchema = z
+  .object({
+    staff_id: uuidSchema,
+    login_username: z.preprocess(
+      (val) => (typeof val === "string" ? val.trim().toLowerCase() : val),
+      z
+        .string()
+        .min(3, "Tên đăng nhập phải có ít nhất 3 ký tự.")
+        .max(32, "Tên đăng nhập không được vượt quá 32 ký tự.")
+        .regex(
+          /^[a-z0-9][a-z0-9._-]{2,31}$/,
+          "Tên đăng nhập phải bắt đầu bằng chữ cái thường hoặc số, từ 3-32 ký tự, chỉ gồm chữ thường (a-z), số (0-9), dấu chấm (.), gạch dưới (_), gạch ngang (-)."
+        )
+    ),
+    password: z
+      .string()
+      .min(8, "Mật khẩu phải có ít nhất 8 ký tự.")
+      .max(100, "Mật khẩu không được vượt quá 100 ký tự."),
+    confirm_password: z.string().min(1, "Vui lòng xác nhận mật khẩu."),
+  })
+  .refine((data) => data.password === data.confirm_password, {
+    message: "Mật khẩu xác nhận không khớp.",
+    path: ["confirm_password"],
+  });
+
+export type ProvisionStaffDirectCredentialsInput = z.input<typeof provisionStaffDirectCredentialsSchema>;
+export type ProvisionStaffDirectCredentialsParsed = z.output<typeof provisionStaffDirectCredentialsSchema>;
+
+export const assignStaffLoginUsernameSchema = z.object({
+  staff_id: uuidSchema,
+  login_username: z.preprocess(
+    (val) => (typeof val === "string" ? val.trim().toLowerCase() : val),
+    z
+      .string()
+      .min(3, "Tên đăng nhập phải có ít nhất 3 ký tự.")
+      .max(32, "Tên đăng nhập không được vượt quá 32 ký tự.")
+      .regex(
+        /^[a-z0-9][a-z0-9._-]{2,31}$/,
+        "Tên đăng nhập phải bắt đầu bằng chữ cái thường hoặc số, từ 3-32 ký tự, chỉ gồm chữ thường (a-z), số (0-9), dấu chấm (.), gạch dưới (_), gạch ngang (-)."
+      )
+  ),
+});
+
+export type AssignStaffLoginUsernameInput = z.input<typeof assignStaffLoginUsernameSchema>;
+export type AssignStaffLoginUsernameParsed = z.output<typeof assignStaffLoginUsernameSchema>;
+
 

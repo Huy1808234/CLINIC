@@ -142,10 +142,6 @@ export async function requireCurrentStaff(): Promise<StaffIdentity> {
     throw new StaffInactiveError();
   }
 
-  if (staff.auth_setup_required) {
-    throw new AccountSetupRequiredError();
-  }
-
   return {
     id: staff.id,
     user_id: staff.user_id,

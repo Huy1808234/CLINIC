@@ -1,18 +1,31 @@
 "use client";
 
 import React, { useState } from "react";
+import {
+  Drawer,
+  Form,
+  Input,
+  Select,
+  Checkbox,
+  Button,
+  Alert,
+  Typography,
+  Row,
+  Col,
+} from "antd";
+import {
+  UserAddOutlined,
+  EditOutlined,
+  ShopOutlined,
+} from "@ant-design/icons";
 import type { Clinic, StaffWithClinicMemberships, ClinicRoleCode } from "@/types/clinic";
-import { Modal } from "@/components/ui/Modal";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
-import { Alert } from "@/components/ui/Alert";
-import { Badge } from "@/components/ui/Badge";
 import {
   createStaffAction,
   updateStaffAction,
   assignStaffClinicAction,
-  provisionStaffAuthAccountAction,
 } from "@/app/actions/staff-actions";
+
+const { Text } = Typography;
 
 export interface StaffModalProps {
   isOpen: boolean;
@@ -21,9 +34,12 @@ export interface StaffModalProps {
   selectedStaff: StaffWithClinicMemberships | null;
   clinics: Clinic[];
   onSuccess: () => void;
+  onOpenResetPassword?: (staff: StaffWithClinicMemberships) => void;
+  onOpenProvisionStaff?: (staff: StaffWithClinicMemberships) => void;
+  onOpenAssignUsername?: (staff: StaffWithClinicMemberships) => void;
 }
 
-const ALL_ROLES: { code: ClinicRoleCode; label: string }[] = [
+export const ALL_ROLES: { code: ClinicRoleCode; label: string }[] = [
   { code: "DOCTOR", label: "Bác Sĩ Điều Trị (DOCTOR)" },
   { code: "RECEPTIONIST", label: "Lễ Tân Tiếp Đón (RECEPTIONIST)" },
   { code: "TECHNICIAN", label: "Kỹ Thuật Viên (TECHNICIAN)" },
@@ -33,129 +49,118 @@ const ALL_ROLES: { code: ClinicRoleCode; label: string }[] = [
   { code: "ADMIN", label: "Quản Trị Hệ Thống (ADMIN)" },
 ];
 
-interface StaffModalFormProps {
-  mode: "CREATE" | "EDIT" | "ASSIGN_CLINIC";
-  selectedStaff: StaffWithClinicMemberships | null;
-  clinics: Clinic[];
-  onClose: () => void;
-  onSuccess: () => void;
-}
-
-const StaffModalForm: React.FC<StaffModalFormProps> = ({
+export const StaffModal: React.FC<StaffModalProps> = ({
+  isOpen,
+  onClose,
   mode,
   selectedStaff,
   clinics,
-  onClose,
   onSuccess,
 }) => {
-  const [staffCode, setStaffCode] = useState<string>(selectedStaff?.staff_code || "");
-  const [fullName, setFullName] = useState<string>(selectedStaff?.full_name || "");
-  const [phone, setPhone] = useState<string>(selectedStaff?.phone || "");
-  const [email, setEmail] = useState<string>(selectedStaff?.email || "");
-  const [roleType] = useState<ClinicRoleCode>("DOCTOR");
-
-  const [selectedClinicId, setSelectedClinicId] = useState<string>(clinics[0]?.id || "");
-  const [isPrimary, setIsPrimary] = useState<boolean>(mode === "CREATE");
-  const [selectedRoles, setSelectedRoles] = useState<ClinicRoleCode[]>(["DOCTOR"]);
-
+  const [form] = Form.useForm();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Auth Provisioning State
-  const [showProvisionForm, setShowProvisionForm] = useState<boolean>(false);
-  const [loginEmail, setLoginEmail] = useState<string>(selectedStaff?.email || "");
-  const [isProvisioning, setIsProvisioning] = useState<boolean>(false);
-  const [provisionError, setProvisionError] = useState<string | null>(null);
-  const [provisionSuccess, setProvisionSuccess] = useState<string | null>(null);
-
-  const handleProvisionAuth = async () => {
-    if (!selectedStaff) return;
-    if (!loginEmail.trim()) {
-      setProvisionError("Vui lòng nhập email đăng nhập.");
-      return;
-    }
-
-    setIsProvisioning(true);
-    setProvisionError(null);
-    setProvisionSuccess(null);
-
-    try {
-      const res = await provisionStaffAuthAccountAction({
-        staff_id: selectedStaff.id,
-        login_email: loginEmail.trim(),
-      });
-
-      if (!res.success) {
-        setProvisionError(res.error || "Lỗi cấp tài khoản đăng nhập.");
-      } else {
-        setProvisionSuccess("Đã tạo tài khoản và gửi lời mời thiết lập mật khẩu!");
-        setShowProvisionForm(false);
-        onSuccess();
-      }
-    } catch (err: unknown) {
-      setProvisionError((err as Error).message || "Lỗi cấp tài khoản đăng nhập.");
-    } finally {
-      setIsProvisioning(false);
-    }
-  };
-
-  const handleRoleToggle = (code: ClinicRoleCode) => {
-    if (selectedRoles.includes(code)) {
-      if (selectedRoles.length > 1) {
-        setSelectedRoles(selectedRoles.filter((r) => r !== code));
+  const handleAfterOpenChange = (open: boolean) => {
+    if (open) {
+      setErrorMsg(null);
+      if (mode === "CREATE") {
+        form.setFieldsValue({
+          staffCode: "",
+          fullName: "",
+          phone: "",
+          email: "",
+          clinicId: clinics[0]?.id || "",
+          isPrimary: true,
+          roles: ["DOCTOR"],
+        });
+      } else if (mode === "EDIT" && selectedStaff) {
+        form.setFieldsValue({
+          staffCode: selectedStaff.staff_code,
+          fullName: selectedStaff.full_name,
+          phone: selectedStaff.phone || "",
+          email: selectedStaff.email || "",
+        });
+      } else if (mode === "ASSIGN_CLINIC" && selectedStaff) {
+        const primaryMembership = selectedStaff.memberships.find((m) => m.is_primary);
+        form.setFieldsValue({
+          clinicId: primaryMembership?.clinic_id || clinics[0]?.id || "",
+          isPrimary: primaryMembership ? primaryMembership.is_primary : true,
+          roles: primaryMembership ? primaryMembership.roles : ["DOCTOR"],
+        });
       }
     } else {
-      setSelectedRoles([...selectedRoles, code]);
+      setErrorMsg(null);
+      form.resetFields();
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (values: {
+    staffCode?: string;
+    fullName?: string;
+    phone?: string;
+    email?: string;
+    clinicId?: string;
+    isPrimary?: boolean;
+    roles?: ClinicRoleCode[];
+  }) => {
     setIsLoading(true);
     setErrorMsg(null);
 
     try {
       if (mode === "CREATE") {
+        if (!values.clinicId) {
+          throw new Error("Vui lòng chọn cơ sở phòng khám làm việc ban đầu.");
+        }
+        if (!values.roles || values.roles.length === 0) {
+          throw new Error("Vui lòng chọn ít nhất một vai trò chuyên môn.");
+        }
+
         const res = await createStaffAction({
-          staff_code: staffCode.trim().toUpperCase(),
-          full_name: fullName.trim(),
-          role_type: roleType,
-          phone: phone.trim() || null,
-          email: email.trim() || null,
-          clinic_assignments: selectedClinicId
-            ? [
-              {
-                clinic_id: selectedClinicId,
-                is_primary: isPrimary,
-                roles: selectedRoles,
-              },
-            ]
-            : [],
+          staff_code: values.staffCode!.trim().toUpperCase(),
+          full_name: values.fullName!.trim(),
+          phone: values.phone?.trim() || undefined,
+          email: values.email?.trim() || undefined,
+          role_type: values.roles[0] || "DOCTOR",
+          is_active: true,
+          clinic_assignments: [
+            {
+              clinic_id: values.clinicId,
+              is_primary: values.isPrimary ?? true,
+              roles: values.roles,
+            },
+          ],
         });
 
         if (!res.success) {
           throw new Error(res.error);
         }
-      } else if (mode === "EDIT" && selectedStaff) {
+      } else if (mode === "EDIT") {
+        if (!selectedStaff) return;
         const res = await updateStaffAction({
           id: selectedStaff.id,
-          full_name: fullName.trim(),
-          phone: phone.trim() || null,
-          email: email.trim() || null,
+          full_name: values.fullName!.trim(),
+          phone: values.phone?.trim() || undefined,
+          email: values.email?.trim() || undefined,
         });
 
         if (!res.success) {
           throw new Error(res.error);
         }
-      } else if (mode === "ASSIGN_CLINIC" && selectedStaff) {
-        if (!selectedClinicId) {
+      } else if (mode === "ASSIGN_CLINIC") {
+        if (!selectedStaff) return;
+        if (!values.clinicId) {
           throw new Error("Vui lòng chọn cơ sở phòng khám.");
         }
+        if (!values.roles || values.roles.length === 0) {
+          throw new Error("Vui lòng chọn ít nhất một vai trò.");
+        }
+
         const res = await assignStaffClinicAction({
           staff_id: selectedStaff.id,
-          clinic_id: selectedClinicId,
-          is_primary: isPrimary,
-          roles: selectedRoles,
+          clinic_id: values.clinicId,
+          is_primary: values.isPrimary ?? false,
+          roles: values.roles,
         });
 
         if (!res.success) {
@@ -166,279 +171,185 @@ const StaffModalForm: React.FC<StaffModalFormProps> = ({
       onSuccess();
       onClose();
     } catch (err: unknown) {
-      setErrorMsg((err as Error).message || "Đã xảy ra lỗi khi lưu thông tin.");
+      setErrorMsg((err as Error).message || "Lỗi xử lý hồ sơ nhân viên.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const titles = {
+    CREATE: {
+      title: "Thêm Nhân Viên Mới",
+      sub: "Tạo hồ sơ nhân viên mới và thiết lập phân công cơ sở ban đầu",
+      icon: <UserAddOutlined style={{ color: "#0f766e", fontSize: 18 }} />,
+    },
+    EDIT: {
+      title: "Chỉnh Sửa Hồ Sơ Nhân Viên",
+      sub: `Cập nhật thông tin định danh và liên hệ của ${selectedStaff?.full_name || ""}`,
+      icon: <EditOutlined style={{ color: "#0f766e", fontSize: 18 }} />,
+    },
+    ASSIGN_CLINIC: {
+      title: "Phân Công Cơ Sở & Vai Trò",
+      sub: `Thiết lập phân quyền cơ sở cho nhân viên ${selectedStaff?.full_name || ""}`,
+      icon: <ShopOutlined style={{ color: "#0f766e", fontSize: 18 }} />,
+    },
+  };
+
+  const headerConfig = titles[mode];
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
-
-      {(mode === "CREATE" || mode === "EDIT") && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Mã Nhân Viên *"
-              placeholder="VD: BS-HAI, LT-01"
-              value={staffCode}
-              onChange={(e) => setStaffCode(e.target.value.toUpperCase())}
-              disabled={mode === "EDIT"}
-              required
-            />
-
-            <Input
-              label="Họ Và Tên *"
-              placeholder="VD: BS. Nguyễn Minh Thu"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Số Điện Thoại"
-              placeholder="VD: 0912345678"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-
-            <Input
-              label="Email"
-              type="email"
-              placeholder="VD: doctor.hai@thuanthien.vn"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          {mode === "EDIT" && selectedStaff && (
-            <div className="pt-4 border-t border-slate-100 space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-teal-800">
-                Tài Khoản Đăng Nhập
-              </h4>
-
-              {selectedStaff.user_id ? (
-                selectedStaff.auth_setup_required ? (
-                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-semibold text-amber-800">⏳ Chờ nhân viên thiết lập mật khẩu</span>
-                      <p className="text-[11px] text-amber-700">
-                        Tài khoản đã được tạo và gửi lời mời. Nhân viên cần hoàn tất thiết lập mật khẩu cá nhân trước khi sử dụng hệ thống.
-                      </p>
-                    </div>
-                    <Badge variant="warning" size="sm">Chờ thiết lập</Badge>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-semibold text-emerald-800">✅ Đã kích hoạt tài khoản</span>
-                      <p className="text-[11px] text-emerald-700">
-                        Hồ sơ nhân viên đã được liên kết tài khoản và hoàn tất thiết lập mật khẩu.
-                      </p>
-                    </div>
-                    <Badge variant="success" size="sm">Đã kích hoạt</Badge>
-                  </div>
-                )
-              ) : (
-                <div className="space-y-3">
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-semibold text-slate-800">Trạng thái: Chưa có tài khoản</span>
-                      <p className="text-[11px] text-slate-600">
-                        Nhân viên chưa có tài khoản đăng nhập vào hệ thống.
-                      </p>
-                    </div>
-                    {!showProvisionForm && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="primary"
-                        onClick={() => setShowProvisionForm(true)}
-                      >
-                        Cấp Tài Khoản
-                      </Button>
-                    )}
-                  </div>
-
-                  {showProvisionForm && (
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                      <h5 className="text-xs font-bold text-slate-800">Cấp Tài Khoản & Gửi Lời Mời Thiết Lập</h5>
-                      <p className="text-[11px] text-slate-500">
-                        Hệ thống sẽ tạo tài khoản và gửi liên kết mời nhân viên tự thiết lập mật khẩu đăng nhập riêng.
-                      </p>
-                      {provisionError && <Alert variant="error">{provisionError}</Alert>}
-                      {provisionSuccess && <Alert variant="success">{provisionSuccess}</Alert>}
-
-                      <div className="space-y-3">
-                        <Input
-                          label="Email Đăng Nhập *"
-                          type="email"
-                          placeholder="VD: doctor.hai@thuanthien.vn"
-                          value={loginEmail}
-                          onChange={(e) => setLoginEmail(e.target.value)}
-                          required
-                        />
-                        <div className="flex items-center justify-end gap-2 pt-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setShowProvisionForm(false);
-                              setProvisionError(null);
-                            }}
-                            disabled={isProvisioning}
-                          >
-                            Hủy
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="primary"
-                            onClick={handleProvisionAuth}
-                            isLoading={isProvisioning}
-                          >
-                            Xác Nhận Gửi Lời Mời
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {(mode === "CREATE" || mode === "ASSIGN_CLINIC") && (
-        <div className="space-y-4 pt-4 border-t border-slate-100">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-teal-800">
-            Phân Công Cơ Sở Phòng Khám & Vai Trò
-          </h4>
-
-          {clinics.length === 0 ? (
-            <p className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-              Chưa có cơ sở phòng khám nào trong hệ thống.
-            </p>
-          ) : (
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
-                Chọn Cơ Sở Phòng Khám *
-              </label>
-              <select
-                value={selectedClinicId}
-                onChange={(e) => setSelectedClinicId(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-teal-500 focus:outline-none"
-                required
-              >
-                {clinics.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.clinic_code})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="isPrimaryClinic"
-              checked={isPrimary}
-              onChange={(e) => setIsPrimary(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-            />
-            <label htmlFor="isPrimaryClinic" className="text-xs font-medium text-slate-700">
-              Đây là cơ sở làm việc chính (Primary Clinic)
-            </label>
-          </div>
-
+    <Drawer
+      open={isOpen}
+      onClose={onClose}
+      afterOpenChange={handleAfterOpenChange}
+      destroyOnHidden
+      styles={{
+        wrapper: { width: "580px", maxWidth: "90vw" },
+        body: { padding: "20px" },
+      }}
+      title={
+        <div className="flex items-center gap-2.5">
+          {headerConfig.icon}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-2">
-              Các Vai Trò Tại Cơ Sở Này * (Có thể chọn nhiều vai trò)
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {ALL_ROLES.map((role) => {
-                const isChecked = selectedRoles.includes(role.code);
-                return (
-                  <label
-                    key={role.code}
-                    className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${isChecked
-                        ? "bg-teal-50/80 border-teal-400 text-teal-900 font-semibold"
-                        : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => handleRoleToggle(role.code)}
-                      className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                    />
-                    <span>{role.label}</span>
-                  </label>
-                );
-              })}
+            <div className="font-bold text-sm text-slate-900 leading-tight">
+              {headerConfig.title}
+            </div>
+            <div className="text-[11px] text-slate-500 font-normal mt-0.5">
+              {headerConfig.sub}
             </div>
           </div>
         </div>
-      )}
-
-      <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
-        <Button type="button" variant="ghost" onClick={onClose} disabled={isLoading}>
-          Hủy
-        </Button>
-        <Button type="submit" variant="primary" isLoading={isLoading}>
-          {mode === "CREATE" ? "Tạo Nhân Viên" : "Lưu Thay Đổi"}
-        </Button>
-      </div>
-    </form>
-  );
-};
-
-export const StaffModal: React.FC<StaffModalProps> = ({
-  isOpen,
-  onClose,
-  mode,
-  selectedStaff,
-  clinics,
-  onSuccess,
-}) => {
-  const modalTitle =
-    mode === "CREATE"
-      ? "Thêm Nhân Viên Mới"
-      : mode === "EDIT"
-        ? `Cập Nhật Hồ Sơ: ${selectedStaff?.full_name}`
-        : `Phân Công Cơ Sở: ${selectedStaff?.full_name}`;
-
-  const modalDescription =
-    mode === "CREATE"
-      ? "Tạo hồ sơ nhân viên mới và phân công vào các cơ sở phòng khám."
-      : mode === "EDIT"
-        ? "Chỉnh sửa thông tin liên hệ và danh xưng nhân viên."
-        : "Gán nhân viên vào cơ sở phòng khám và phân quyền vai trò cụ thể.";
-
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={modalTitle}
-      description={modalDescription}
-      maxWidth="lg"
+      }
     >
-      {isOpen && (
-        <StaffModalForm
-          key={`${mode}-${selectedStaff?.id || "new"}`}
-          mode={mode}
-          selectedStaff={selectedStaff}
-          clinics={clinics}
-          onClose={onClose}
-          onSuccess={onSuccess}
+      {errorMsg && (
+        <Alert
+          type="error"
+          title={errorMsg}
+          showIcon
+          closable
+          onClose={() => setErrorMsg(null)}
+          className="mb-4"
         />
       )}
-    </Modal>
+
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={handleSubmit}
+        className="space-y-4"
+      >
+        {/* Section 1: Staff Profile (CREATE & EDIT modes) */}
+        {(mode === "CREATE" || mode === "EDIT") && (
+          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-3">
+            <Text strong className="text-xs text-slate-800 uppercase tracking-wider block">
+              1. Thông Tin Định Danh & Liên Hệ
+            </Text>
+
+            <Row gutter={12}>
+              <Col span={8}>
+                <Form.Item
+                  label={<span className="text-xs font-semibold text-slate-700">Mã NV *</span>}
+                  name="staffCode"
+                  rules={[{ required: mode === "CREATE", message: "Nhập mã nhân viên" }]}
+                  className="mb-2"
+                >
+                  <Input placeholder="VD: BS01, LT02" disabled={mode === "EDIT"} />
+                </Form.Item>
+              </Col>
+              <Col span={16}>
+                <Form.Item
+                  label={<span className="text-xs font-semibold text-slate-700">Họ và tên *</span>}
+                  name="fullName"
+                  rules={[{ required: true, message: "Nhập họ và tên" }]}
+                  className="mb-2"
+                >
+                  <Input placeholder="VD: Bác sĩ Nguyễn Văn An" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item
+                  label={<span className="text-xs font-semibold text-slate-700">Số điện thoại</span>}
+                  name="phone"
+                  className="mb-0"
+                >
+                  <Input placeholder="0912345678" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  label={<span className="text-xs font-semibold text-slate-700">Email</span>}
+                  name="email"
+                  className="mb-0"
+                >
+                  <Input placeholder="bacsi@thuanthien.vn" />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
+        )}
+
+        {/* Section 2: Clinic Assignment & Roles (CREATE & ASSIGN_CLINIC modes) */}
+        {(mode === "CREATE" || mode === "ASSIGN_CLINIC") && (
+          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-3">
+            <Text strong className="text-xs text-slate-800 uppercase tracking-wider block">
+              {mode === "CREATE" ? "2. Phân Công Cơ Sở & Vai Trò Ban Đầu" : "Thông Tin Phân Công Cơ Sở"}
+            </Text>
+
+            <Form.Item
+              label={<span className="text-xs font-semibold text-slate-700">Cơ sở phòng khám *</span>}
+              name="clinicId"
+              rules={[{ required: true, message: "Vui lòng chọn cơ sở" }]}
+              className="mb-2"
+            >
+              <Select
+                placeholder="Chọn cơ sở làm việc"
+                options={clinics.map((c) => ({ label: c.name, value: c.id }))}
+              />
+            </Form.Item>
+
+            <Form.Item name="isPrimary" valuePropName="checked" className="mb-2">
+              <Checkbox>
+                <span className="text-xs text-slate-800 font-medium">
+                  Đặt làm cơ sở làm việc chính (Primary Clinic)
+                </span>
+              </Checkbox>
+            </Form.Item>
+
+            <Form.Item
+              label={<span className="text-xs font-semibold text-slate-700">Vai trò chuyên môn tại cơ sở *</span>}
+              name="roles"
+              rules={[{ required: true, message: "Chọn ít nhất một vai trò" }]}
+              className="mb-0"
+            >
+              <Checkbox.Group className="grid grid-cols-1 gap-1.5 pt-1">
+                {ALL_ROLES.map((r) => (
+                  <Checkbox key={r.code} value={r.code} className="text-xs text-slate-700">
+                    {r.label}
+                  </Checkbox>
+                ))}
+              </Checkbox.Group>
+            </Form.Item>
+          </div>
+        )}
+
+        {/* Drawer Actions */}
+        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+          <Button onClick={onClose} disabled={isLoading}>
+            Hủy
+          </Button>
+          <Button
+            type="primary"
+            htmlType="submit"
+            loading={isLoading}
+            style={{ backgroundColor: "#0f766e", fontWeight: 600 }}
+          >
+            {mode === "CREATE" ? "Tạo Nhân Viên" : "Lưu Thay Đổi"}
+          </Button>
+        </div>
+      </Form>
+    </Drawer>
   );
 };

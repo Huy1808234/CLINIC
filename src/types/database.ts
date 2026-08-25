@@ -220,6 +220,7 @@ export interface Database {
         Row: {
           id: string;
           user_id: string | null;
+          login_username: string | null;
           staff_code: string;
           full_name: string;
           role_type: StaffRole;
@@ -233,6 +234,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id?: string | null;
+          login_username?: string | null;
           staff_code: string;
           full_name: string;
           role_type: StaffRole;
@@ -246,6 +248,7 @@ export interface Database {
         Update: {
           id?: string;
           user_id?: string | null;
+          login_username?: string | null;
           staff_code?: string;
           full_name?: string;
           role_type?: StaffRole;
@@ -618,11 +621,69 @@ export interface Database {
         };
         Relationships: [];
       };
+      treatment_session_plans: {
+        Row: {
+          id: string;
+          treatment_course_id: string;
+          session_number: number;
+          planned_by_doctor_id: string;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          treatment_course_id: string;
+          session_number: number;
+          planned_by_doctor_id: string;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          treatment_course_id?: string;
+          session_number?: number;
+          planned_by_doctor_id?: string;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      treatment_session_plan_services: {
+        Row: {
+          id: string;
+          session_plan_id: string;
+          service_id: string;
+          sequence_no: number;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          session_plan_id: string;
+          service_id: string;
+          sequence_no?: number;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          session_plan_id?: string;
+          service_id?: string;
+          sequence_no?: number;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       appointments: {
         Row: {
           id: string;
           patient_id: string;
           treatment_course_id: string;
+          treatment_session_plan_id: string | null;
           doctor_id: string | null;
           appointment_date: string;
           scheduled_start_at: string;
@@ -640,6 +701,7 @@ export interface Database {
           id?: string;
           patient_id: string;
           treatment_course_id: string;
+          treatment_session_plan_id?: string | null;
           doctor_id?: string | null;
           appointment_date: string;
           scheduled_start_at: string;
@@ -657,6 +719,7 @@ export interface Database {
           id?: string;
           patient_id?: string;
           treatment_course_id?: string;
+          treatment_session_plan_id?: string | null;
           doctor_id?: string | null;
           appointment_date?: string;
           scheduled_start_at?: string;
@@ -1242,6 +1305,66 @@ export interface Database {
           p_login_email: string;
           p_actor_staff_id: string;
           p_actor_user_id: string;
+        };
+        Returns: Json;
+      };
+      link_staff_auth_account_direct: {
+        Args: {
+          p_staff_id: string;
+          p_clinic_id: string;
+          p_auth_user_id: string;
+          p_login_username: string;
+          p_actor_staff_id: string;
+          p_actor_user_id: string;
+        };
+        Returns: Json;
+      };
+      finalize_staff_admin_password_reset: {
+        Args: {
+          p_staff_id: string;
+          p_clinic_id: string;
+          p_actor_staff_id: string;
+          p_actor_user_id: string;
+        };
+        Returns: Json;
+      };
+      assign_staff_login_username: {
+        Args: {
+          p_staff_id: string;
+          p_clinic_id: string;
+          p_login_username: string;
+          p_actor_staff_id: string;
+          p_actor_user_id: string;
+        };
+        Returns: Json;
+      };
+      save_treatment_session_plan: {
+        Args: {
+          p_treatment_course_id: string;
+          p_clinic_id: string;
+          p_session_number: number;
+          p_service_ids: string[];
+          p_notes?: string | null;
+          p_actor_staff_id?: string | null;
+          p_actor_user_id?: string | null;
+        };
+        Returns: Json;
+      };
+      process_reception_intake_atomic: {
+        Args: {
+          p_clinic_id: string;
+          p_actor_staff_id: string;
+          p_actor_user_id: string;
+          p_existing_patient_id?: string | null;
+          p_new_patient?: Json | null;
+          p_reception_source?: string;
+          p_reason_for_visit?: string | null;
+          p_notes?: string | null;
+          p_height_cm?: number | null;
+          p_weight_kg?: number | null;
+          p_create_course?: boolean;
+          p_doctor_id?: string | null;
+          p_start_date?: string | null;
         };
         Returns: Json;
       };

@@ -12,11 +12,9 @@ export default async function StaffPage() {
   return (
     <AppShell
       title="Quản Lý Nhân Sự & Phân Công Cơ Sở"
-      subtitle="Hồ sơ nhân viên, phân quyền đa vai trò và phân công làm việc tại các cơ sở phòng khám"
+      subtitle="Quản lý nhân viên, tài khoản đăng nhập, vai trò và phân công cơ sở."
     >
-      <div className="max-w-7xl mx-auto">
-        <StaffClientView initialStaff={staffList} clinics={clinics} />
-      </div>
+      <StaffClientView initialStaff={staffList} clinics={clinics} />
     </AppShell>
   );
 }

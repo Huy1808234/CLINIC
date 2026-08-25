@@ -17,12 +17,16 @@ export interface ScheduleClientViewProps {
   initialMatrix: MonthMatrixData;
   initialTimeline: DayTimelineData;
   doctors: DoctorStaffItem[];
+  clinicTodayDate?: string;
+  clinicTimezone?: string;
 }
 
 export const ScheduleClientView: React.FC<ScheduleClientViewProps> = ({
   initialMatrix,
   initialTimeline,
   doctors,
+  clinicTodayDate,
+  clinicTimezone,
 }) => {
   const [activeTab, setActiveTab] = useState<"MONTH" | "DAY">("MONTH");
   const [selectedMonth, setSelectedMonth] = useState<string>(initialMatrix.month_str);
@@ -167,6 +171,8 @@ export const ScheduleClientView: React.FC<ScheduleClientViewProps> = ({
         onClose={() => setIsAutoScheduleOpen(false)}
         courseId="123e4567-e89b-12d3-a456-426614174000"
         defaultDoctorId={autoScheduleDoctorId}
+        defaultStartDate={clinicTodayDate}
+        clinicTimezone={clinicTimezone}
         doctors={doctors.map((d) => ({ id: d.id, name: d.full_name, code: d.staff_code }))}
         onScheduleSubmit={async (input) => {
           const res = await autoScheduleAction(input);

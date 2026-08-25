@@ -19,6 +19,7 @@ export interface ApplicationAccessContext {
     organization_id: string;
     membership_id: string;
     is_primary: boolean;
+    timezone: string;
   };
 }
 
@@ -54,6 +55,7 @@ export async function getApplicationAccessContext(): Promise<ApplicationAccessCo
       organization_id: clinic.organization_id,
       membership_id: clinic.membership_id,
       is_primary: clinic.is_primary,
+      timezone: clinic.timezone || "Asia/Ho_Chi_Minh",
     },
   };
 }
@@ -86,6 +88,7 @@ export async function requireApplicationAccessContext(): Promise<ApplicationAcce
       organization_id: clinic.organization_id,
       membership_id: clinic.membership_id,
       is_primary: clinic.is_primary,
+      timezone: clinic.timezone || "Asia/Ho_Chi_Minh",
     },
   };
 }

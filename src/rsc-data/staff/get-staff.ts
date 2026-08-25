@@ -130,6 +130,7 @@ export async function getStaffList(clinicIdFilter?: string): Promise<StaffWithCl
     let result: StaffWithClinicMemberships[] = staffRows.map((s) => ({
       id: s.id,
       user_id: s.user_id || null,
+      login_username: (s.login_username as string | null | undefined) ?? null,
       auth_setup_required: (s.auth_setup_required as boolean | undefined) ?? false,
       auth_setup_completed_at: (s.auth_setup_completed_at as string | null | undefined) ?? null,
       staff_code: s.staff_code,

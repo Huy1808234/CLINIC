@@ -7,10 +7,18 @@ import {
   updateStaffSchema,
   assignClinicMembershipSchema,
   provisionStaffAuthSchema,
+  adminResetStaffPasswordSchema,
+  resetStaffPasswordByAdminSchema,
+  provisionStaffDirectCredentialsSchema,
+  assignStaffLoginUsernameSchema,
   type CreateStaffInput,
   type UpdateStaffInput,
   type AssignClinicMembershipInput,
   type ProvisionStaffAuthInput,
+  type AdminResetStaffPasswordInput,
+  type ResetStaffPasswordByAdminInput,
+  type ProvisionStaffDirectCredentialsInput,
+  type AssignStaffLoginUsernameInput,
 } from "@/lib/validation/staff-schemas";
 import {
   requireTargetClinicRole,
@@ -29,15 +37,27 @@ import {
 } from "@/lib/auth/staff-resolver";
 import {
   provisionStaffAuthAccount,
+  adminResetStaffPassword,
+  provisionStaffDirectCredentials,
+  assignStaffLoginUsername,
   StaffAlreadyLinkedError,
   AuthEmailAlreadyExistsError,
   TargetStaffNotFoundError,
   TargetStaffInactiveError,
+  TargetStaffNotLinkedError,
   TargetStaffClinicAccessDeniedError,
   UnauthorizedAdminError,
   InvalidActorError,
   StaffLinkFailedError,
   ProvisionCompensationFailedError,
+  StaffLoginEmailRequiredError,
+  StaffLoginEmailInvalidError,
+  LoginUsernameAlreadyExistsError,
+  InvalidLoginUsernameError,
+  TargetUsernameAlreadySetError,
+  LoginUsernameAlreadyAssignedError,
+  InvalidPasswordError,
+  ResetStateFinalizationFailedError,
 } from "@/lib/staff/staff-auth-service";
 import { ZodError } from "zod";
 
@@ -731,6 +751,300 @@ export async function provisionStaffAuthAccountAction(input: ProvisionStaffAuthI
     return {
       success: false,
       error: (error as Error).message || "Lỗi cấp tài khoản đăng nhập.",
+    };
+  }
+}
+
+/**
+ * Server Action: Authoritatively resets a Staff member's Supabase Auth login password.
+ *
+ * Security & Governance:
+ * 1. Admin is the sole operator for Staff password reset.
+ * 2. Caller MUST hold ADMIN role at verified active clinic.
+ * 3. Target Staff MUST belong to the SAME active clinic and have `user_id IS NOT NULL`.
+ * 4. Password updated server-side via Supabase Admin API without ever storing or logging passwords.
+ * 5. Invariants preserved: `staff.user_id`, `login_username`, `staff.email`, memberships, and roles.
+ * 6. Audit log `RESET_STAFF_AUTH_PASSWORD` is recorded.
+ */
+export async function resetStaffPasswordByAdminAction(
+  rawInput: ResetStaffPasswordByAdminInput | AdminResetStaffPasswordInput
+) {
+  try {
+    // 1. Authorize caller: Caller MUST hold ADMIN role at active clinic
+    const authContext = await requireActionAuthorization({
+      requiredRoles: ["ADMIN"],
+    });
+    const activeClinicId = authContext.access.clinic.clinic_id;
+    const actorStaffId = authContext.access.staff.id;
+    const actorUser = await requireAuthenticatedUser();
+
+    // 2. Validate input schema
+    const parsed =
+      "new_password" in rawInput
+        ? resetStaffPasswordByAdminSchema.parse(rawInput)
+        : adminResetStaffPasswordSchema.parse(rawInput);
+
+    // 3. Delegate to privileged staff auth service
+    const supabase = createAdminClient();
+    const result = await adminResetStaffPassword(
+      supabase,
+      parsed,
+      activeClinicId,
+      actorStaffId,
+      actorUser.id
+    );
+
+    revalidatePath("/staff");
+    return {
+      success: true,
+      data: {
+        staff_id: result.staff_id,
+        staff_code: result.staff_code,
+        full_name: result.full_name,
+        message: result.message,
+      },
+      message: result.message,
+    };
+  } catch (error: unknown) {
+    if (
+      error instanceof TargetStaffNotFoundError ||
+      error instanceof TargetStaffInactiveError ||
+      error instanceof TargetStaffNotLinkedError ||
+      error instanceof TargetStaffClinicAccessDeniedError ||
+      error instanceof InvalidPasswordError ||
+      error instanceof ResetStateFinalizationFailedError ||
+      error instanceof UnauthorizedAdminError
+    ) {
+      return {
+        success: false,
+        error: error.message,
+        code: (error as { code?: string }).code,
+      };
+    }
+    if (
+      error instanceof ActionForbiddenError ||
+      error instanceof StaffClinicAccessDeniedError
+    ) {
+      return {
+        success: false,
+        error: "Bạn không có quyền quản trị (ADMIN) tại cơ sở này để đặt lại mật khẩu.",
+        code: "UNAUTHORIZED_ADMIN",
+      };
+    }
+    if (
+      error instanceof AuthenticationRequiredError ||
+      error instanceof StaffNotLinkedError ||
+      error instanceof StaffInactiveError
+    ) {
+      return {
+        success: false,
+        error: "Yêu cầu đăng nhập tài khoản quản trị hợp lệ.",
+        code: "INVALID_ACTOR",
+      };
+    }
+    if (error instanceof ZodError) {
+      return {
+        success: false,
+        error: error.issues[0]?.message || "Dữ liệu mật khẩu không hợp lệ.",
+        code: "INVALID_INPUT",
+      };
+    }
+    return {
+      success: false,
+      error: (error as Error).message || "Không thể thực hiện thao tác lúc này. Vui lòng thử lại.",
+    };
+  }
+}
+
+export const adminResetStaffPasswordAction = resetStaffPasswordByAdminAction;
+
+/**
+ * Server action to authoritatively provision direct login credentials for a Staff member.
+ *
+ * Security & Governance:
+ * - Requires active ADMIN role at the active clinic context.
+ * - All authority tokens (actor IDs, clinic ID) and target email are server-derived.
+ * - Password and credentials are NEVER persisted to PostgreSQL or logged.
+ */
+export async function provisionStaffDirectCredentialsAction(
+  rawInput: ProvisionStaffDirectCredentialsInput
+) {
+  try {
+    const authContext = await requireActionAuthorization({
+      requiredRoles: ["ADMIN"],
+    });
+    const activeClinicId = authContext.access.clinic.clinic_id;
+    const actorStaffId = authContext.access.staff.id;
+    const actorUser = await requireAuthenticatedUser();
+
+    const parsed = provisionStaffDirectCredentialsSchema.parse(rawInput);
+    const supabase = createAdminClient();
+
+    const result = await provisionStaffDirectCredentials(
+      supabase,
+      parsed,
+      activeClinicId,
+      actorStaffId,
+      actorUser.id
+    );
+
+    revalidatePath("/staff");
+
+    return {
+      success: true,
+      data: {
+        staff_id: result.staff_id,
+        login_username: result.login_username,
+      },
+      message: result.message,
+    };
+  } catch (error: unknown) {
+    if (
+      error instanceof StaffAlreadyLinkedError ||
+      error instanceof AuthEmailAlreadyExistsError ||
+      error instanceof TargetStaffNotFoundError ||
+      error instanceof TargetStaffInactiveError ||
+      error instanceof TargetStaffClinicAccessDeniedError ||
+      error instanceof StaffLoginEmailRequiredError ||
+      error instanceof StaffLoginEmailInvalidError ||
+      error instanceof LoginUsernameAlreadyExistsError ||
+      error instanceof InvalidLoginUsernameError ||
+      error instanceof TargetUsernameAlreadySetError ||
+      error instanceof InvalidPasswordError ||
+      error instanceof StaffLinkFailedError ||
+      error instanceof ProvisionCompensationFailedError ||
+      error instanceof UnauthorizedAdminError
+    ) {
+      return {
+        success: false,
+        error: error.message,
+        code: (error as { code?: string }).code,
+      };
+    }
+    if (
+      error instanceof ActionForbiddenError ||
+      error instanceof StaffClinicAccessDeniedError
+    ) {
+      return {
+        success: false,
+        error: "Bạn không có quyền quản trị (ADMIN) tại cơ sở này để cấp tài khoản đăng nhập.",
+        code: "UNAUTHORIZED_ADMIN",
+      };
+    }
+    if (
+      error instanceof AuthenticationRequiredError ||
+      error instanceof StaffNotLinkedError ||
+      error instanceof StaffInactiveError
+    ) {
+      return {
+        success: false,
+        error: "Yêu cầu đăng nhập tài khoản quản trị hợp lệ.",
+        code: "INVALID_ACTOR",
+      };
+    }
+    if (error instanceof ZodError) {
+      return {
+        success: false,
+        error: error.issues[0]?.message || "Dữ liệu cấp tài khoản không hợp lệ.",
+        code: "INVALID_INPUT",
+      };
+    }
+    return {
+      success: false,
+      error: (error as Error).message || "Không thể thực hiện thao tác lúc này. Vui lòng thử lại.",
+    };
+  }
+}
+
+/**
+ * Server action for ADMIN to assign a canonical login_username to an existing linked legacy Staff record.
+ * 
+ * Spec Reference: GOAL STAFF-AUTH1C-LEGACY-USERNAME-APP1
+ */
+export async function assignStaffLoginUsernameAction(
+  rawInput: AssignStaffLoginUsernameInput
+) {
+  try {
+    const authContext = await requireActionAuthorization({
+      requiredRoles: ["ADMIN"],
+    });
+    const activeClinicId = authContext.access.clinic.clinic_id;
+    const actorStaffId = authContext.access.staff.id;
+    const actorUser = await requireAuthenticatedUser();
+
+    const parsed = assignStaffLoginUsernameSchema.parse(rawInput);
+    const supabase = createAdminClient();
+
+    const result = await assignStaffLoginUsername(
+      supabase,
+      parsed,
+      activeClinicId,
+      actorStaffId,
+      actorUser.id
+    );
+
+    revalidatePath("/staff");
+
+    return {
+      success: true,
+      data: {
+        staff_id: result.staff_id,
+        login_username: result.login_username,
+      },
+      message: result.message,
+    };
+  } catch (error: unknown) {
+    if (
+      error instanceof TargetStaffNotFoundError ||
+      error instanceof TargetStaffInactiveError ||
+      error instanceof TargetStaffNotLinkedError ||
+      error instanceof TargetStaffClinicAccessDeniedError ||
+      error instanceof LoginUsernameAlreadyExistsError ||
+      error instanceof InvalidLoginUsernameError ||
+      error instanceof TargetUsernameAlreadySetError ||
+      error instanceof LoginUsernameAlreadyAssignedError ||
+      error instanceof UnauthorizedAdminError
+    ) {
+      return {
+        success: false,
+        error: error.message,
+        code: (error as { code?: string }).code,
+      };
+    }
+    if (
+      error instanceof ActionForbiddenError ||
+      error instanceof StaffClinicAccessDeniedError
+    ) {
+      return {
+        success: false,
+        error: "Bạn không có quyền quản trị (ADMIN) tại cơ sở này để gán tên đăng nhập.",
+        code: "UNAUTHORIZED_ADMIN",
+      };
+    }
+    if (
+      error instanceof AuthenticationRequiredError ||
+      error instanceof StaffNotLinkedError ||
+      error instanceof StaffInactiveError
+    ) {
+      return {
+        success: false,
+        error: "Yêu cầu đăng nhập tài khoản quản trị hợp lệ.",
+        code: "INVALID_ACTOR",
+      };
+    }
+    if (error instanceof ZodError) {
+      return {
+        success: false,
+        error: error.issues[0]?.message || "Dữ liệu không hợp lệ.",
+        code: "INVALID_INPUT",
+      };
+    }
+
+    console.error("Lỗi gán tên đăng nhập nhân viên:", error);
+    return {
+      success: false,
+      error: "Đã xảy ra lỗi khi gán tên đăng nhập. Vui lòng thử lại sau.",
+      code: "UNKNOWN_ERROR",
     };
   }
 }

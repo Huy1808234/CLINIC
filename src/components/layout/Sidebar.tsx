@@ -2,117 +2,234 @@
 
 import React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import { Menu, Avatar, Dropdown, Typography, Drawer } from "antd";
+import type { MenuProps } from "antd";
+import {
+  UserAddOutlined,
+  CalendarOutlined,
+  FileTextOutlined,
+  TeamOutlined,
+  CloudUploadOutlined,
+  DownOutlined,
+  SwapOutlined,
+  LogoutOutlined,
+  CloseOutlined,
+} from "@ant-design/icons";
+import type { ClinicRoleCode } from "@/types/clinic";
+import {
+  getAvatarInitials,
+  formatSecondaryAccountLabel,
+  isRouteVisibleForRoles,
+} from "@/lib/auth/shell-identity";
+import { signOutAction } from "@/app/actions/auth-actions";
 
-export interface NavItem {
+const { Text } = Typography;
+
+export interface SidebarProps {
+  open?: boolean;
+  onClose?: () => void;
+  currentStaff?: {
+    id: string;
+    staff_code: string;
+    full_name: string;
+  };
+  activeClinic?: {
+    clinic_id: string;
+    clinic_code: string;
+    name: string;
+  };
+  activeRoles?: ClinicRoleCode[];
+}
+
+interface NavItemConfig {
+  key: string;
   label: string;
   href: string;
   icon: React.ReactNode;
-  badge?: string | number;
 }
 
-export const Sidebar: React.FC = () => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  open = false,
+  onClose,
+  currentStaff,
+  activeClinic,
+  activeRoles = [],
+}) => {
+  const router = useRouter();
   const pathname = usePathname();
 
-  const navItems: NavItem[] = [
+  const allNavConfigs: NavItemConfig[] = [
     {
+      key: "/reception",
       label: "Tiếp Nhận Khám",
       href: "/reception",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-      ),
+      icon: <UserAddOutlined style={{ fontSize: 16 }} />,
     },
     {
+      key: "/schedule",
       label: "Lịch Hẹn & Ma Trận",
       href: "/schedule",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-      ),
+      icon: <CalendarOutlined style={{ fontSize: 16 }} />,
     },
     {
+      key: "/patients",
       label: "Hồ Sơ Bệnh Nhân",
       href: "/patients",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      ),
+      icon: <FileTextOutlined style={{ fontSize: 16 }} />,
     },
     {
+      key: "/staff",
       label: "Nhân Sự & Cơ Sở",
       href: "/staff",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-      ),
+      icon: <TeamOutlined style={{ fontSize: 16 }} />,
     },
     {
+      key: "/migration",
       label: "Nhập Dữ Liệu Excel",
       href: "/migration",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-        </svg>
-      ),
+      icon: <CloudUploadOutlined style={{ fontSize: 16 }} />,
     },
   ];
 
+  // Dynamic role-based navigation visibility (UNION semantics)
+  const visibleNavConfigs = allNavConfigs.filter((item) =>
+    isRouteVisibleForRoles(item.href, activeRoles)
+  );
+
+  const initials = getAvatarInitials(currentStaff?.full_name || "");
+  const secondaryLabel = formatSecondaryAccountLabel(
+    activeRoles,
+    activeClinic?.name || ""
+  );
+
+  const handleLogout = async () => {
+    await signOutAction();
+  };
+
+  const staffDropdownItems: MenuProps["items"] = [
+    {
+      key: "switch-clinic",
+      icon: <SwapOutlined />,
+      label: "Đổi cơ sở làm việc",
+      onClick: () => {
+        onClose?.();
+        router.push("/select-clinic");
+      },
+    },
+    {
+      type: "divider",
+    },
+    {
+      key: "logout",
+      icon: <LogoutOutlined />,
+      danger: true,
+      label: "Đăng xuất",
+      onClick: handleLogout,
+    },
+  ];
+
+  // Determine active key from current path
+  const selectedKey =
+    visibleNavConfigs.find(
+      (item) => pathname === item.href || pathname?.startsWith(`${item.href}/`)
+    )?.key || "/reception";
+
+  const drawerMenuItems = visibleNavConfigs.map((item) => ({
+    key: item.key,
+    icon: item.icon,
+    label: (
+      <Link href={item.href} onClick={() => onClose?.()}>
+        {item.label}
+      </Link>
+    ),
+  }));
+
   return (
-    <aside className="w-64 shrink-0 border-r border-slate-200 bg-white flex flex-col h-screen sticky top-0 no-print">
-      {/* Brand Header */}
-      <div className="h-16 flex items-center px-6 border-b border-slate-100 gap-3">
-        <div className="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
-          TT
-        </div>
-        <div>
-          <h1 className="text-sm font-bold text-slate-900 leading-tight">THUẬN THIÊN</h1>
-          <p className="text-[11px] text-teal-700 font-medium">Y Học Cổ Truyền</p>
-        </div>
-      </div>
-
-      {/* Navigation Links */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                isActive
-                  ? "bg-teal-50 text-teal-900 shadow-xs font-semibold"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              <span className={isActive ? "text-teal-600" : "text-slate-400"}>{item.icon}</span>
-              <span className="flex-1">{item.label}</span>
-              {item.badge && (
-                <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-teal-100 text-teal-800">
-                  {item.badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Footer Info */}
-      <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 font-semibold text-xs flex items-center justify-center">
-            BS
+    <Drawer
+      placement="left"
+      open={open}
+      onClose={onClose}
+      closable={false}
+      styles={{
+        wrapper: {
+          width: "320px",
+          maxWidth: "85vw",
+        },
+        body: {
+          padding: 0,
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          backgroundColor: "#ffffff",
+        },
+      }}
+    >
+      {/* 1. Brand Header */}
+      <div className="h-16 flex items-center justify-between px-5 border-b border-slate-100 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-teal-700 flex items-center justify-center text-white font-bold text-sm shadow-xs shrink-0">
+            TT
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-slate-800 truncate">Bác Sĩ Tiếp Nhận</p>
-            <p className="text-[11px] text-slate-400 truncate">Phòng Khám YHCT</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xs font-bold text-slate-900 leading-tight truncate m-0">
+              {activeClinic?.name ? activeClinic.name.toUpperCase() : ""}
+            </h1>
+            <p className="text-[10px] text-teal-700 font-medium truncate m-0">
+              Y Học Cổ Truyền
+            </p>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition-colors"
+          aria-label="Đóng thanh điều hướng"
+        >
+          <CloseOutlined style={{ fontSize: 14 }} />
+        </button>
       </div>
-    </aside>
+
+      {/* 2. Authorized Navigation Menu */}
+      <div className="flex-1 py-3 overflow-y-auto">
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedKey]}
+          items={drawerMenuItems}
+          style={{ borderRight: 0 }}
+        />
+      </div>
+
+      {/* 3. Current Staff Identity Bottom Card */}
+      <div className="p-3 border-t border-slate-100 bg-slate-50/70 shrink-0">
+        <Dropdown menu={{ items: staffDropdownItems }} trigger={["click"]} placement="topRight">
+          <div className="flex items-center justify-between gap-2.5 rounded-lg p-1.5 hover:bg-slate-200/60 cursor-pointer transition-colors">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Avatar
+                size={36}
+                style={{
+                  backgroundColor: "#0f766e",
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  flexShrink: 0,
+                }}
+              >
+                {initials}
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <Text strong className="text-xs text-slate-900 truncate block">
+                  {currentStaff?.full_name}
+                </Text>
+                <p className="text-[10px] text-slate-500 truncate m-0">
+                  {secondaryLabel}
+                </p>
+              </div>
+            </div>
+            <DownOutlined style={{ fontSize: 10, color: "#94a3b8" }} className="shrink-0" />
+          </div>
+        </Dropdown>
+      </div>
+    </Drawer>
   );
 };

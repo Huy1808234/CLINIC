@@ -1,13 +1,17 @@
 import "server-only";
 import { createClient } from "@/supabase-clients/server";
+import { getActiveClinicContext } from "@/lib/auth/clinic-context";
+import { DEFAULT_CLINIC_TIMEZONE } from "@/utils/timezone";
 import type { DayTimelineData, DayTimelineSlot } from "@/types/schedule";
 import type { AppointmentWithDetails, AppointmentStep } from "@/types/appointment";
 import type { Patient } from "@/types/patient";
 import { generateDailyTimeSlots } from "@/lib/scheduling/generate-slots";
-import { formatTimeVN } from "@/utils/format-time";
+import { formatTimestampTime } from "@/utils/format-time";
 
 export async function getDayTimeline(dateStr: string): Promise<DayTimelineData> {
   const supabase = await createClient();
+  const clinicContext = await getActiveClinicContext();
+  const clinicTimezone = clinicContext?.timezone || DEFAULT_CLINIC_TIMEZONE;
 
   // 1. Fetch active doctors
   const { data: doctors } = await supabase
@@ -80,10 +84,10 @@ export async function getDayTimeline(dateStr: string): Promise<DayTimelineData> 
       appointmentsByDoctor[doc.id] = [];
     }
 
-    // Assign appointments starting within this slot
+    // Assign appointments starting within this slot in clinic-local time
     for (const appt of formattedAppts) {
       if (appt.doctor_id && appt.scheduled_start_at) {
-        const apptTime = formatTimeVN(appt.scheduled_start_at.split("T")[1]?.slice(0, 5));
+        const apptTime = formatTimestampTime(appt.scheduled_start_at, clinicTimezone);
         if (apptTime === timeStr) {
           if (!appointmentsByDoctor[appt.doctor_id]) {
             appointmentsByDoctor[appt.doctor_id] = [];

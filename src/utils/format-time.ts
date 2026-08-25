@@ -1,3 +1,5 @@
+import { DEFAULT_CLINIC_TIMEZONE } from "./timezone";
+
 /**
  * Time Utilities & Excel Time Fraction Parser
  * In Excel, time is often stored as a fraction of a day (e.g. 0.315277 -> 07:34).
@@ -43,8 +45,43 @@ export function parseTimeToHHMM(input: string | number | null | undefined): stri
   return null;
 }
 
-export function formatTimeVN(timeStr: string | null | undefined): string {
+/**
+ * Formats a TIMESTAMPTZ ISO string or Date object to HH:mm in the specified clinic timezone.
+ * Returns "—" for null, undefined, or invalid timestamps.
+ */
+export function formatTimestampTime(
+  input: string | Date | null | undefined,
+  timeZone = DEFAULT_CLINIC_TIMEZONE
+): string {
+  if (input === null || input === undefined || input === "") return "—";
+
+  const d = typeof input === "string" ? new Date(input) : input;
+  if (isNaN(d.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: timeZone || DEFAULT_CLINIC_TIMEZONE,
+  }).format(d);
+}
+
+/**
+ * Universal time formatter:
+ * 1. If input is an ISO timestamp (contains "T" or full ISO date), formats in clinic timezone.
+ * 2. If input is a plain time-of-day string ("07:30", "7h30", 0.315 fraction), formats via parseTimeToHHMM.
+ */
+export function formatTimeVN(
+  timeStr: string | number | null | undefined,
+  timeZone = DEFAULT_CLINIC_TIMEZONE
+): string {
   if (!timeStr) return "—";
+
+  // If string represents an ISO timestamp (contains "T" or is Date-like)
+  if (typeof timeStr === "string" && (timeStr.includes("T") || (timeStr.includes("-") && timeStr.length > 10))) {
+    return formatTimestampTime(timeStr, timeZone);
+  }
+
   const parsed = parseTimeToHHMM(timeStr);
-  return parsed || timeStr;
+  return parsed || String(timeStr);
 }

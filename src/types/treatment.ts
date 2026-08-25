@@ -58,3 +58,23 @@ export interface TreatmentCourseDetail extends TreatmentCourse {
   tags: { id: string; code: string; label: string; category: string; note: string | null }[];
   progress_percentage: number;
 }
+
+export interface PlannedOccurrenceService {
+  id: string;
+  service_id: string;
+  service_code: string;
+  service_name: string;
+  sequence_no: number;
+  notes: string | null;
+}
+
+export interface TreatmentSessionPlanItem {
+  id: string;
+  treatment_course_id: string;
+  session_number: number;
+  planned_by_doctor_id: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  services: PlannedOccurrenceService[];
+}

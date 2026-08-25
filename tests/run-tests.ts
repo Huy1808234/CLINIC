@@ -16,6 +16,27 @@ import { runApplicationAccessTests } from "./unit/application-access.test";
 import { runActionAuthorizationTests } from "./unit/action-authorization.test";
 import { runStaffGovernanceTests } from "./unit/staff-governance.test";
 import { runPasswordRecoveryTests } from "./unit/password-recovery.test";
+import { runUsernameSchemaTests } from "./unit/username-schema.test";
+import { runLinkStaffDirectRpcTests } from "./unit/link-staff-direct-rpc.test";
+import { runDirectProvisioningServiceTests } from "./unit/direct-provisioning-service.test";
+import { runAdminResetPasswordTests } from "./unit/admin-reset-password.test";
+import { runFinalizeResetRpcTests } from "./unit/finalize-reset-rpc.test";
+import { runAssignUsernameRpcTests } from "./unit/assign-username-rpc.test";
+import { runLegacyUsernameAppTests } from "./unit/legacy-username-app.test";
+import { runStaffAuthUiTests } from "./unit/staff-auth-ui.test";
+import { runShellIdentityTests } from "./unit/shell-identity.test";
+import { runReceptionClinicalHandoffTests } from "./unit/reception-clinical-handoff.test";
+import { runTreatmentSessionPlansMigration32Tests } from "./unit/treatment-session-plans-migration32.test";
+import { runSaveTreatmentSessionPlanRpc33Tests } from "./unit/save-treatment-session-plan-rpc33.test";
+import { runDoctorOccurrencePlanUiTests } from "./unit/doctor-occurrence-plan-ui.test";
+import { runAntdReceptionShellTests } from "./unit/antd-reception-shell.test";
+import { runAntdStaffUiTests } from "./unit/antd-staff-ui.test";
+import { runAntdPatientMasterTests } from "./unit/antd-patient-master.test";
+import { runAntdReceptionModalTests } from "./unit/antd-reception-modal.test";
+import { runAtomicReceptionIntakeRpcTests } from "./unit/atomic-reception-intake-rpc.test";
+import { runReceptionTimezoneTests } from "./unit/reception-timezone.test";
+import { runScheduleTimezoneTests } from "./unit/schedule-timezone.test";
+import { runLoginAntdRedesignTests } from "./unit/login-antd-redesign.test";
 
 async function main() {
   try {
@@ -29,7 +50,7 @@ async function main() {
     runStaffResolverTests();
     runClinicResolverTests();
     runRoleResolverTests();
-    runSignInTests();
+    await runSignInTests();
     runClinicContextTests();
     runSignOutTests();
     runRouteGateTests();
@@ -37,6 +58,27 @@ async function main() {
     runActionAuthorizationTests();
     runStaffGovernanceTests();
     await runPasswordRecoveryTests();
+    runUsernameSchemaTests();
+    runLinkStaffDirectRpcTests();
+    await runDirectProvisioningServiceTests();
+    await runAdminResetPasswordTests();
+    runFinalizeResetRpcTests();
+    runAssignUsernameRpcTests();
+    await runLegacyUsernameAppTests();
+    runStaffAuthUiTests();
+    runShellIdentityTests();
+    runReceptionClinicalHandoffTests();
+    runTreatmentSessionPlansMigration32Tests();
+    runSaveTreatmentSessionPlanRpc33Tests();
+    runDoctorOccurrencePlanUiTests();
+    runAntdReceptionShellTests();
+    runAntdStaffUiTests();
+    runAntdPatientMasterTests();
+    runAntdReceptionModalTests();
+    await runAtomicReceptionIntakeRpcTests();
+    await runReceptionTimezoneTests();
+    await runScheduleTimezoneTests();
+    runLoginAntdRedesignTests();
     console.log("All unit test suites executed successfully.");
   } catch (err) {
     console.error("Test failure:", err);
