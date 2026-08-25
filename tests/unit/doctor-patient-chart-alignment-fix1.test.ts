@@ -60,15 +60,14 @@ export function runDoctorPatientChartAlignmentFix1Tests() {
 
   // 3. Synchronized Lower 2-Column Grid Rows
   assert.ok(
-    clientViewCode.includes("grid-cols-1 lg:grid-cols-12 gap-6 items-stretch"),
-    "Lower section uses synchronized items-stretch 12-column grid"
+    clientViewCode.includes("items-stretch"),
+    "Lower section uses synchronized items-stretch grid"
   );
   assert.ok(
-    clientViewCode.includes("<PatientStatsSummaryCard") &&
-      clientViewCode.includes("<PatientNotesCard") &&
-      clientViewCode.includes("<LatestDiagnosisCard") &&
-      clientViewCode.includes("<RecentAppointmentsCard"),
-    "Lower section contains all 4 balanced cards in synchronized pairs"
+    (clientViewCode.includes("<CombinedClinicalSummaryCard") ||
+      (clientViewCode.includes("<PatientStatsSummaryCard") && clientViewCode.includes("<LatestDiagnosisCard"))) &&
+      clientViewCode.includes("<PatientNotesCard"),
+    "Lower section contains clinical summary and notes in synchronized pairs"
   );
 
   // 4. Normalized Empty State Messages

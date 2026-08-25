@@ -52,6 +52,7 @@ import { runAuthProtectedPageLogoutStabilityTests } from "./unit/auth-protected-
 import { runClinicalMasterDiagnosisProductionHardeningTests } from "./unit/clinical-master-diagnosis-production-hardening.test";
 import { runDoctorPatientChartReferenceUi2Tests } from "./unit/doctor-patient-chart-reference-ui2.test";
 import { runDoctorPatientChartAlignmentFix1Tests } from "./unit/doctor-patient-chart-alignment-fix1.test";
+import { runDoctorPatientChartLayoutParityFix2Tests } from "./unit/doctor-patient-chart-layout-parity-fix2.test";
 
 async function main() {
   try {
@@ -109,6 +110,7 @@ async function main() {
     await runClinicalMasterDiagnosisProductionHardeningTests();
     runDoctorPatientChartReferenceUi2Tests();
     runDoctorPatientChartAlignmentFix1Tests();
+    runDoctorPatientChartLayoutParityFix2Tests();
     console.log("All unit test suites executed successfully.");
   } catch (err) {
     console.error("Test failure:", err);
