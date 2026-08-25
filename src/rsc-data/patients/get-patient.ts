@@ -42,12 +42,16 @@ export async function getPatientProfile(patientId: string): Promise<PatientProfi
         id,
         patient_id,
         card_number,
-        issue_date,
-        expiration_date,
-        initial_healthcare_code,
-        initial_healthcare_name,
+        registered_facility_code,
+        registered_facility_name,
+        subject_code,
+        benefit_rate,
+        valid_from,
+        valid_to,
+        raw_validity_text,
+        verification_status,
+        verified_at,
         is_current,
-        notes,
         created_at
       `)
       .eq("patient_id", patientId)
@@ -61,16 +65,11 @@ export async function getPatientProfile(patientId: string): Promise<PatientProfi
       .select(`
         id,
         patient_id,
-        blood_pressure_systolic,
-        blood_pressure_diastolic,
-        heart_rate,
-        temperature,
-        height,
-        weight,
-        bmi,
-        notes,
-        measured_at,
-        created_at
+        height_cm,
+        weight_kg,
+        source,
+        recorded_by,
+        measured_at
       `)
       .eq("patient_id", patientId)
       .order("measured_at", { ascending: false })
@@ -82,11 +81,13 @@ export async function getPatientProfile(patientId: string): Promise<PatientProfi
       .select(`
         id,
         patient_id,
-        alert_type,
-        alert_level,
+        category,
+        severity,
         message,
         is_active,
-        created_at
+        created_by,
+        created_at,
+        resolved_at
       `)
       .eq("patient_id", patientId)
       .eq("is_active", true)

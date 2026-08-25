@@ -82,12 +82,16 @@ export async function getTodayReceptions(targetDate?: string): Promise<Reception
         id,
         patient_id,
         card_number,
-        issue_date,
-        expiration_date,
-        initial_healthcare_code,
-        initial_healthcare_name,
+        registered_facility_code,
+        registered_facility_name,
+        subject_code,
+        benefit_rate,
+        valid_from,
+        valid_to,
+        raw_validity_text,
+        verification_status,
+        verified_at,
         is_current,
-        notes,
         created_at
       `)
       .in("patient_id", patientIds)

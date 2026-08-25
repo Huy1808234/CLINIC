@@ -57,12 +57,16 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
         id,
         patient_id,
         card_number,
-        issue_date,
-        expiration_date,
-        initial_healthcare_code,
-        initial_healthcare_name,
+        registered_facility_code,
+        registered_facility_name,
+        subject_code,
+        benefit_rate,
+        valid_from,
+        valid_to,
+        raw_validity_text,
+        verification_status,
+        verified_at,
         is_current,
-        notes,
         created_at
       `)
       .eq("patient_id", patientId)
@@ -75,16 +79,11 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
       .select(`
         id,
         patient_id,
-        blood_pressure_systolic,
-        blood_pressure_diastolic,
-        heart_rate,
-        temperature,
-        height,
-        weight,
-        bmi,
-        notes,
-        measured_at,
-        created_at
+        height_cm,
+        weight_kg,
+        source,
+        recorded_by,
+        measured_at
       `)
       .eq("patient_id", patientId)
       .order("measured_at", { ascending: false })
@@ -96,11 +95,13 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
       .select(`
         id,
         patient_id,
-        alert_type,
-        alert_level,
+        category,
+        severity,
         message,
         is_active,
-        created_at
+        created_by,
+        created_at,
+        resolved_at
       `)
       .eq("patient_id", patientId)
       .order("created_at", { ascending: false })
@@ -170,8 +171,8 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
         patient_relation_type,
         reason_for_visit,
         notes,
-        created_at,
-        staff:created_by(full_name)
+        created_by,
+        created_at
       `)
       .eq("patient_id", patientId)
       .order("registered_at", { ascending: false })

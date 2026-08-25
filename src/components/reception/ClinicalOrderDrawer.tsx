@@ -550,6 +550,24 @@ export const ClinicalOrderDrawer: React.FC<ClinicalOrderDrawerProps> = ({
           </div>
         </div>
 
+        {/* Reception Intake Context (Reason for visit & Symptoms) */}
+        {(item.reason_for_visit || item.notes) && (
+          <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-xl space-y-1 text-xs">
+            {item.reason_for_visit && (
+              <div>
+                <span className="font-semibold text-amber-900">Lý do đến khám: </span>
+                <span className="text-amber-950 font-medium">{item.reason_for_visit}</span>
+              </div>
+            )}
+            {item.notes && (
+              <div>
+                <span className="font-semibold text-amber-900">Triệu chứng ban đầu: </span>
+                <span className="text-amber-900 italic">{item.notes}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {errorMsg && (
           <Alert
             type="error"

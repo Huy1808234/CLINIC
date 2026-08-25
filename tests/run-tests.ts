@@ -59,6 +59,7 @@ import { runDoctorClinicalNotesHardening1Tests } from "./unit/doctor-clinical-no
 import { runDoctorClinicalOrderComboboxUx2Tests } from "./unit/doctor-clinical-order-combobox-ux2.test";
 import { runPerfQueryIndexProductionHardening1Tests } from "./unit/perf-query-index-production-hardening1.test";
 import { runDeploymentRegionAlignment1Tests } from "./unit/deployment-region-alignment1.test";
+import { runReceptionToDoctorHandoffIntegrity1Tests } from "./unit/reception-to-doctor-handoff-integrity1.test";
 
 async function main() {
   try {
@@ -123,6 +124,7 @@ async function main() {
     runDoctorClinicalOrderComboboxUx2Tests();
     runPerfQueryIndexProductionHardening1Tests();
     runDeploymentRegionAlignment1Tests();
+    runReceptionToDoctorHandoffIntegrity1Tests();
     console.log("All unit test suites executed successfully.");
   } catch (err) {
     console.error("Test failure:", err);

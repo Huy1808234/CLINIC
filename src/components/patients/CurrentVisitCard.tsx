@@ -69,9 +69,15 @@ export const CurrentVisitCard: React.FC<CurrentVisitCardProps> = ({
         </div>
 
         {/* Intake / Reception Metadata Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs bg-slate-50/80 p-3.5 rounded-xl border border-slate-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs bg-slate-50/80 p-3.5 rounded-xl border border-slate-100">
           <div>
-            <span className="text-slate-400 font-medium block text-[11px]">Thời gian tiếp nhận</span>
+            <span className="text-slate-400 font-medium block text-[11px]">Bác sĩ tiếp nhận</span>
+            <span className="font-semibold text-slate-800 mt-0.5 block text-[13px]">
+              BS. {currentCourse?.doctor_name || "Chưa phân công"}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-400 font-medium block text-[11px]">Tiếp nhận lúc (Thời gian tiếp nhận)</span>
             <span className="font-semibold text-slate-800 mt-0.5 block font-mono text-[13px]">
               {formattedTime}
             </span>
@@ -96,27 +102,25 @@ export const CurrentVisitCard: React.FC<CurrentVisitCardProps> = ({
           </div>
         </div>
 
-        {/* Lý do đến khám & Ghi chú triệu chứng ban đầu */}
+        {/* Lý do đến khám & Triệu chứng ban đầu */}
         <div className="space-y-3 text-xs">
           <div>
-            <span className="text-slate-400 font-semibold block text-[11px] mb-1">
+            <span className="text-slate-500 font-semibold block text-xs mb-1">
               Lý do đến khám
             </span>
-            <div className="text-slate-800 font-medium bg-slate-50/50 p-3 rounded-xl border border-slate-100 text-[13px] leading-relaxed">
+            <div className="text-slate-900 font-medium bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 text-[13px] leading-relaxed">
               {recentReception?.reason_for_visit || "Bệnh nhân đến khám theo nhu cầu."}
             </div>
           </div>
 
-          {recentReception?.notes && (
-            <div>
-              <span className="text-slate-400 font-semibold block text-[11px] mb-1">
-                Ghi chú triệu chứng ban đầu
-              </span>
-              <div className="text-slate-700 bg-slate-50/50 p-3 rounded-xl border border-slate-100 italic text-[12px] leading-relaxed">
-                {recentReception.notes}
-              </div>
+          <div>
+            <span className="text-slate-500 font-semibold block text-xs mb-1">
+              Triệu chứng ban đầu
+            </span>
+            <div className="text-slate-800 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80 italic text-[12px] leading-relaxed">
+              {recentReception?.notes || "Không có ghi chú triệu chứng ban đầu."}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
