@@ -11,7 +11,7 @@ import { LatestDiagnosisCard } from "./LatestDiagnosisCard";
 import { CurrentCourseSummaryCard } from "./CurrentCourseSummaryCard";
 import { TreatmentHistoryAccordion } from "./TreatmentHistoryAccordion";
 import { PatientNotesCard } from "./PatientNotesCard";
-import { RecentAppointmentsCard } from "@/components/clinical/RecentAppointmentsCard";
+import { RecentAppointmentsCard } from "./RecentAppointmentsCard";
 
 export interface PatientChartClientViewProps {
   history: PatientHistorySummary;
@@ -57,9 +57,9 @@ export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
         latestMeasurement={latestMeasurement}
       />
 
-      {/* 2. MAIN 2-COLUMN GRID (Left ~8/12, Right ~4/12) */}
+      {/* 2. UPPER CLINICAL VISIT & COURSE WORKSPACE (2-Column Grid) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT COLUMN: Current Visit -> Start Exam CTA / Workspace -> (Stats + Latest Diagnosis) */}
+        {/* Upper Left (~8/12): Current Visit -> Start Exam CTA / Workspace */}
         <div className="lg:col-span-8 space-y-6">
           {/* Buổi khám hiện tại */}
           <CurrentVisitCard recentReception={latestReception} />
@@ -74,22 +74,9 @@ export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
             onStartExam={() => setIsExamStarted(true)}
             onCollapseExam={() => setIsExamStarted(false)}
           />
-
-          {/* Bottom Grid: Thông tin tóm tắt & Chẩn đoán chính gần nhất side-by-side */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-            {/* Thông tin tóm tắt (3 metrics) */}
-            <PatientStatsSummaryCard treatmentCourses={treatment_courses} />
-
-            {/* Chẩn đoán chính gần nhất */}
-            <LatestDiagnosisCard
-              latestPrimaryDiag={latestPrimaryDiag}
-              doctorName={currentCourse?.doctor_name}
-              diagnosisDate={currentCourse?.start_date}
-            />
-          </div>
         </div>
 
-        {/* RIGHT COLUMN: Current Course Summary -> Treatment History Accordion -> Notes -> Appointments */}
+        {/* Upper Right (~4/12): Current Course Summary -> Treatment History Accordion */}
         <div className="lg:col-span-4 space-y-6">
           {/* Thông tin trong liệu trình hiện tại */}
           <CurrentCourseSummaryCard currentCourse={currentCourse} />
@@ -99,11 +86,32 @@ export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
             treatmentCourses={treatment_courses}
             activeCourseId={currentCourse?.id}
           />
+        </div>
+      </div>
 
-          {/* Ghi chú */}
+      {/* 3. LOWER SYNCHRONIZED 2-COLUMN GRID (Row 1: Stats + Notes, Row 2: Diagnosis + Appointments) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        {/* ROW 1 LEFT (~8/12): Thông tin tóm tắt (3 KPI cards) */}
+        <div className="lg:col-span-8 flex flex-col">
+          <PatientStatsSummaryCard treatmentCourses={treatment_courses} />
+        </div>
+
+        {/* ROW 1 RIGHT (~4/12): Ghi chú */}
+        <div className="lg:col-span-4 flex flex-col">
           <PatientNotesCard notes={latestReception?.notes} />
+        </div>
 
-          {/* Lịch hẹn gần đây */}
+        {/* ROW 2 LEFT (~8/12): Chẩn đoán chính gần nhất */}
+        <div className="lg:col-span-8 flex flex-col">
+          <LatestDiagnosisCard
+            latestPrimaryDiag={latestPrimaryDiag}
+            doctorName={currentCourse?.doctor_name}
+            diagnosisDate={currentCourse?.start_date}
+          />
+        </div>
+
+        {/* ROW 2 RIGHT (~4/12): Lịch hẹn gần đây */}
+        <div className="lg:col-span-4 flex flex-col">
           <RecentAppointmentsCard appointments={recent_appointments} />
         </div>
       </div>

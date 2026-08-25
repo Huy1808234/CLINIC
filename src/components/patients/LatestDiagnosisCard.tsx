@@ -4,6 +4,7 @@ import React from "react";
 import { Tag } from "antd";
 import { MedicineBoxOutlined, UserOutlined, CalendarOutlined } from "@ant-design/icons";
 import type { PatientCourseDiagnosisSummaryItem } from "@/types/patient";
+import { SectionCard, SectionCardHeader, EmptyStatePanel } from "./SectionCard";
 
 export interface LatestDiagnosisCardProps {
   latestPrimaryDiag?: PatientCourseDiagnosisSummaryItem | null;
@@ -21,22 +22,22 @@ export const LatestDiagnosisCard: React.FC<LatestDiagnosisCardProps> = ({
     : null;
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4 h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
-        <div className="flex items-center gap-2">
-          <MedicineBoxOutlined className="text-[#00897b] text-base" />
-          <h3 className="text-base font-bold text-slate-800 m-0">Chẩn đoán chính gần nhất</h3>
-        </div>
-        {latestPrimaryDiag?.raw_code && (
-          <Tag
-            color="cyan"
-            className="m-0 font-mono text-xs font-semibold px-2.5 py-0.5 rounded-md border-teal-200 text-teal-800 bg-teal-50"
-          >
-            {latestPrimaryDiag.raw_code}
-          </Tag>
-        )}
-      </div>
+    <SectionCard>
+      {/* Shared Section Header */}
+      <SectionCardHeader
+        icon={<MedicineBoxOutlined />}
+        title="Chẩn đoán chính gần nhất"
+        badge={
+          latestPrimaryDiag?.raw_code ? (
+            <Tag
+              color="cyan"
+              className="m-0 font-mono text-xs font-semibold px-2.5 py-0.5 rounded-md border-teal-200 text-teal-800 bg-teal-50"
+            >
+              {latestPrimaryDiag.raw_code}
+            </Tag>
+          ) : undefined
+        }
+      />
 
       {/* Content */}
       <div className="flex-1 flex flex-col justify-center">
@@ -70,12 +71,12 @@ export const LatestDiagnosisCard: React.FC<LatestDiagnosisCardProps> = ({
             </div>
           </div>
         ) : (
-          <div className="py-8 text-center text-xs text-slate-400 italic bg-slate-50/50 rounded-xl border border-dashed border-slate-200 flex flex-col items-center justify-center gap-2">
-            <MedicineBoxOutlined className="text-slate-300 text-2xl" />
-            <span>Chưa có chẩn đoán chính</span>
-          </div>
+          <EmptyStatePanel
+            icon={<MedicineBoxOutlined />}
+            message="Chưa có chẩn đoán chính"
+          />
         )}
       </div>
-    </div>
+    </SectionCard>
   );
 };
