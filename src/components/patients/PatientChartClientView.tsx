@@ -59,7 +59,7 @@ export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
 
       {/* 2. MAIN 2-COLUMN GRID (Left ~8/12, Right ~4/12) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT COLUMN: Current Visit -> Start Exam CTA / Workspace -> Stats -> Latest Diagnosis */}
+        {/* LEFT COLUMN: Current Visit -> Start Exam CTA / Workspace -> (Stats + Latest Diagnosis) */}
         <div className="lg:col-span-8 space-y-6">
           {/* Buổi khám hiện tại */}
           <CurrentVisitCard recentReception={latestReception} />
@@ -75,19 +75,22 @@ export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
             onCollapseExam={() => setIsExamStarted(false)}
           />
 
-          {/* Thông tin tóm tắt (3 metrics: Tổng số liệu trình, Tổng số buổi, Buổi hoàn tất) */}
-          <PatientStatsSummaryCard treatmentCourses={treatment_courses} />
+          {/* Bottom Grid: Thông tin tóm tắt & Chẩn đoán chính gần nhất side-by-side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+            {/* Thông tin tóm tắt (3 metrics) */}
+            <PatientStatsSummaryCard treatmentCourses={treatment_courses} />
 
-          {/* Chẩn đoán chính gần nhất */}
-          <LatestDiagnosisCard
-            latestPrimaryDiag={latestPrimaryDiag}
-            doctorName={currentCourse?.doctor_name}
-            diagnosisDate={currentCourse?.start_date}
-          />
+            {/* Chẩn đoán chính gần nhất */}
+            <LatestDiagnosisCard
+              latestPrimaryDiag={latestPrimaryDiag}
+              doctorName={currentCourse?.doctor_name}
+              diagnosisDate={currentCourse?.start_date}
+            />
+          </div>
         </div>
 
         {/* RIGHT COLUMN: Current Course Summary -> Treatment History Accordion -> Notes -> Appointments */}
-        <div className="lg:col-span-4 space-y-5">
+        <div className="lg:col-span-4 space-y-6">
           {/* Thông tin trong liệu trình hiện tại */}
           <CurrentCourseSummaryCard currentCourse={currentCourse} />
 

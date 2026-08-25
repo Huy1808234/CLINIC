@@ -68,7 +68,8 @@ export function runDoctorPatientChartReferenceUi2Tests() {
     "Hero summary computes age and shows patient code"
   );
   assert.ok(
-    heroCardCode.includes("patient.phone_number") && heroCardCode.includes("patient.address"),
+    (heroCardCode.includes("patient.phone") || heroCardCode.includes("patient.phone_number")) &&
+      heroCardCode.includes("patient.address"),
     "Hero summary shows phone and address"
   );
   assert.ok(

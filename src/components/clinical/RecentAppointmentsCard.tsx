@@ -13,11 +13,12 @@ export const RecentAppointmentsCard: React.FC<RecentAppointmentsCardProps> = ({
   appointments,
 }) => {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-3.5">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
         <div className="flex items-center gap-2">
-          <CalendarOutlined className="text-teal-600 text-base" />
-          <h3 className="text-sm font-bold text-slate-800 m-0">Lịch hẹn gần đây</h3>
+          <CalendarOutlined className="text-[#00897b] text-base" />
+          <h3 className="text-base font-bold text-slate-800 m-0">Lịch hẹn gần đây</h3>
         </div>
         {appointments.length > 0 && (
           <span className="text-xs text-slate-400 font-medium font-mono">
@@ -26,8 +27,9 @@ export const RecentAppointmentsCard: React.FC<RecentAppointmentsCardProps> = ({
         )}
       </div>
 
+      {/* Content */}
       {appointments.length === 0 ? (
-        <div className="py-3 text-center text-xs text-slate-400">
+        <div className="py-5 text-center text-xs text-slate-400 italic bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
           Chưa có lịch hẹn gần đây.
         </div>
       ) : (

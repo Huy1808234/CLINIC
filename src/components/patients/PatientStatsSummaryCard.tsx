@@ -29,7 +29,7 @@ export const PatientStatsSummaryCard: React.FC<PatientStatsSummaryCardProps> = (
   );
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-4">
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4 h-full">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
         <div className="flex items-center gap-2">
@@ -38,50 +38,50 @@ export const PatientStatsSummaryCard: React.FC<PatientStatsSummaryCardProps> = (
         </div>
       </div>
 
-      {/* 3 KPI Tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* 3 KPI Tiles (Balanced Stack or Grid) */}
+      <div className="space-y-2.5 flex-1 flex flex-col justify-center">
         {/* Tổng số liệu trình */}
-        <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100/80 flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-teal-50 text-[#00897b] flex items-center justify-center text-lg shrink-0">
-            <ScheduleOutlined />
-          </div>
-          <div>
-            <span className="text-[11px] text-slate-400 font-medium block">
+        <div className="bg-slate-50/80 hover:bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-200/70 flex items-center justify-between gap-3 transition-colors">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-teal-100/70 text-teal-700 flex items-center justify-center text-base shrink-0 shadow-2xs">
+              <ScheduleOutlined />
+            </div>
+            <span className="text-xs text-slate-600 font-medium truncate">
               Tổng số liệu trình
             </span>
-            <span className="text-lg font-bold text-slate-900 mt-0.5 block">
-              {totalCourses} <span className="text-xs font-normal text-slate-500">liệu trình</span>
-            </span>
+          </div>
+          <div className="text-base sm:text-lg font-bold text-slate-900 shrink-0 font-mono">
+            {totalCourses} <span className="text-xs font-normal text-slate-500 font-sans">liệu trình</span>
           </div>
         </div>
 
         {/* Tổng số buổi điều trị */}
-        <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100/80 flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shrink-0">
-            <CalendarOutlined />
-          </div>
-          <div>
-            <span className="text-[11px] text-slate-400 font-medium block">
+        <div className="bg-slate-50/80 hover:bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-200/70 flex items-center justify-between gap-3 transition-colors">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-blue-100/70 text-blue-700 flex items-center justify-center text-base shrink-0 shadow-2xs">
+              <CalendarOutlined />
+            </div>
+            <span className="text-xs text-slate-600 font-medium truncate">
               Tổng số buổi điều trị
             </span>
-            <span className="text-lg font-bold text-slate-900 mt-0.5 block">
-              {totalPlannedSessions} <span className="text-xs font-normal text-slate-500">buổi</span>
-            </span>
+          </div>
+          <div className="text-base sm:text-lg font-bold text-slate-900 shrink-0 font-mono">
+            {totalPlannedSessions} <span className="text-xs font-normal text-slate-500 font-sans">buổi</span>
           </div>
         </div>
 
         {/* Tổng số buổi đã hoàn tất */}
-        <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100/80 flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shrink-0">
-            <CheckCircleOutlined />
-          </div>
-          <div>
-            <span className="text-[11px] text-slate-400 font-medium block">
+        <div className="bg-slate-50/80 hover:bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-200/70 flex items-center justify-between gap-3 transition-colors">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-emerald-100/70 text-emerald-700 flex items-center justify-center text-base shrink-0 shadow-2xs">
+              <CheckCircleOutlined />
+            </div>
+            <span className="text-xs text-slate-600 font-medium truncate">
               Buổi đã hoàn tất
             </span>
-            <span className="text-lg font-bold text-slate-900 mt-0.5 block">
-              {totalCompletedSessions} <span className="text-xs font-normal text-slate-500">buổi</span>
-            </span>
+          </div>
+          <div className="text-base sm:text-lg font-bold text-slate-900 shrink-0 font-mono">
+            {totalCompletedSessions} <span className="text-xs font-normal text-slate-500 font-sans">buổi</span>
           </div>
         </div>
       </div>

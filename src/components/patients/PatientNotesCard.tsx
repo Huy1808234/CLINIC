@@ -9,7 +9,7 @@ export interface PatientNotesCardProps {
 
 export const PatientNotesCard: React.FC<PatientNotesCardProps> = ({ notes }) => {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-4">
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
         <div className="flex items-center gap-2">
@@ -20,12 +20,13 @@ export const PatientNotesCard: React.FC<PatientNotesCardProps> = ({ notes }) => 
 
       {/* Content */}
       {notes && notes.trim() ? (
-        <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100/80 text-xs text-slate-700 leading-relaxed italic">
+        <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/70 text-xs text-slate-700 leading-relaxed italic">
           {notes}
         </div>
       ) : (
-        <div className="py-6 text-center text-xs text-slate-400 italic bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-          Chưa có ghi chú lâm sàng bổ sung.
+        <div className="py-6 text-center text-xs text-slate-400 italic bg-slate-50/50 rounded-xl border border-dashed border-slate-200 flex flex-col items-center justify-center gap-1.5">
+          <FormOutlined className="text-slate-300 text-xl" />
+          <span>Chưa có ghi chú lâm sàng bổ sung.</span>
         </div>
       )}
     </div>
