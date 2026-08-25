@@ -80,7 +80,7 @@ export const CurrentCourseSummaryCard: React.FC<CurrentCourseSummaryCardProps> =
             percent={progressPercent}
             showInfo={false}
             strokeColor="#00897b"
-            trailColor="#e2e8f0"
+            railColor="#e2e8f0"
             size="small"
           />
         </div>
