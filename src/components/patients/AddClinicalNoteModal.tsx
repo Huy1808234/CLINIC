@@ -120,7 +120,7 @@ export const AddClinicalNoteModal: React.FC<AddClinicalNoteModalProps> = ({
           Lưu ghi chú
         </Button>,
       ]}
-      destroyOnClose
+      destroyOnHidden
       width={560}
       styles={{
         body: { paddingTop: 12 },

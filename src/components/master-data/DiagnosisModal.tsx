@@ -118,7 +118,7 @@ export const DiagnosisModal: React.FC<DiagnosisModalProps> = ({
       okButtonProps={{
         className: "bg-[#0f766e] hover:bg-teal-700 font-medium",
       }}
-      destroyOnClose
+      destroyOnHidden
       width={680}
     >
       <div className="pt-3">

@@ -244,7 +244,7 @@ export const DiagnosisExcelImportModal: React.FC<DiagnosisExcelImportModalProps>
       open={visible}
       onCancel={handleClose}
       footer={null}
-      destroyOnClose
+      destroyOnHidden
       width={800}
     >
       <div className="pt-3 space-y-4">
