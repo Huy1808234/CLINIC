@@ -10,12 +10,15 @@ export interface DayTimelineGridProps {
   timelineData: DayTimelineData;
   onAppointmentClick?: (appointment: AppointmentWithDetails) => void;
   onStatusChange?: (appointmentId: string, newStatus: AppointmentWithDetails["status"]) => void;
+  /** ID of the appointment currently undergoing a server transition (disables its action buttons) */
+  loadingApptId?: string | null;
 }
 
 export const DayTimelineGrid: React.FC<DayTimelineGridProps> = ({
   timelineData,
   onAppointmentClick,
   onStatusChange,
+  loadingApptId,
 }) => {
   // Filter slots to only show times with active appointments or every 30 mins
   const activeSlots = timelineData.slots.filter((slot) => {
@@ -66,121 +69,118 @@ export const DayTimelineGrid: React.FC<DayTimelineGridProps> = ({
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          {appts.map((appt) => (
-                            <div
-                              key={appt.id}
-                              className="p-3 rounded-lg border border-slate-200 bg-white shadow-xs hover:border-teal-400 transition-all cursor-pointer"
-                              onClick={() => onAppointmentClick && onAppointmentClick(appt)}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <p className="font-semibold text-slate-900 text-xs">
-                                    {appt.patient_name}
-                                  </p>
-                                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                    {appt.patient_code} · LT{appt.course_no}
-                                  </p>
-                                </div>
-                                <Badge
-                                  variant={
-                                    appt.status === "COMPLETED"
-                                      ? "success"
-                                      : appt.status === "IN_TREATMENT"
-                                      ? "purple"
-                                      : appt.status === "CHECKED_IN"
-                                      ? "warning"
-                                      : appt.status === "NO_SHOW"
-                                      ? "danger"
-                                      : "secondary"
-                                  }
-                                  size="sm"
-                                >
-                                  {appt.status === "PLANNED"
-                                    ? "Chưa đến"
-                                    : appt.status === "CHECKED_IN"
-                                    ? "Đã điểm danh"
-                                    : appt.status === "IN_TREATMENT"
-                                    ? "Đang điều trị"
-                                    : appt.status === "COMPLETED"
-                                    ? "Hoàn thành"
-                                    : appt.status === "NO_SHOW"
-                                    ? "Vắng mặt"
-                                    : appt.status === "CANCELLED"
-                                    ? "Đã hủy"
-                                    : appt.status}
-                                </Badge>
-                              </div>
+                          {appts.map((appt) => {
+                            const isLoading = loadingApptId === appt.id;
 
-                              {/* Attendance & Clinical Action buttons */}
-                              <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-slate-100 flex-wrap">
-                                {appt.status === "PLANNED" && onStatusChange && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-[11px] h-7 px-2 border-teal-500 text-teal-700 hover:bg-teal-50"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onStatusChange(appt.id, "CHECKED_IN");
-                                      }}
-                                    >
-                                      Điểm danh
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-[11px] h-7 px-2 text-rose-600 hover:bg-rose-50"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onStatusChange(appt.id, "NO_SHOW");
-                                      }}
-                                    >
-                                      Vắng
-                                    </Button>
-                                  </>
-                                )}
-                                {appt.status === "CHECKED_IN" && onStatusChange && (
-                                  <>
+                            return (
+                              <div
+                                key={appt.id}
+                                className="p-3 rounded-lg border border-slate-200 bg-white shadow-xs hover:border-teal-400 transition-all cursor-pointer"
+                                onClick={() => onAppointmentClick && onAppointmentClick(appt)}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <p className="font-semibold text-slate-900 text-xs">
+                                      {appt.patient_name}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                      {appt.patient_code} · LT{appt.course_no}
+                                    </p>
+                                  </div>
+                                  <Badge
+                                    variant={
+                                      appt.status === "COMPLETED"
+                                        ? "success"
+                                        : appt.status === "IN_TREATMENT"
+                                        ? "purple"
+                                        : appt.status === "CHECKED_IN"
+                                        ? "warning"
+                                        : appt.status === "NO_SHOW"
+                                        ? "danger"
+                                        : "secondary"
+                                    }
+                                    size="sm"
+                                  >
+                                    {appt.status === "PLANNED"
+                                      ? "Chưa đến"
+                                      : appt.status === "CHECKED_IN"
+                                      ? "Đã điểm danh"
+                                      : appt.status === "IN_TREATMENT"
+                                      ? "Đang điều trị"
+                                      : appt.status === "COMPLETED"
+                                      ? "Hoàn thành"
+                                      : appt.status === "NO_SHOW"
+                                      ? "Vắng mặt"
+                                      : appt.status === "CANCELLED"
+                                      ? "Đã hủy"
+                                      : appt.status}
+                                  </Badge>
+                                </div>
+
+                                {/* Attendance & Clinical Action buttons */}
+                                <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-slate-100 flex-wrap">
+                                  {appt.status === "PLANNED" && onStatusChange && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-[11px] h-7 px-2 border-teal-500 text-teal-700 hover:bg-teal-50"
+                                        disabled={isLoading}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onStatusChange(appt.id, "CHECKED_IN");
+                                        }}
+                                      >
+                                        {isLoading ? "..." : "Điểm danh"}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-[11px] h-7 px-2 text-rose-600 hover:bg-rose-50"
+                                        disabled={isLoading}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onStatusChange(appt.id, "NO_SHOW");
+                                        }}
+                                      >
+                                        {isLoading ? "..." : "Vắng"}
+                                      </Button>
+                                    </>
+                                  )}
+                                  {/* CHECKED_IN: NO Vắng button — patient has already arrived.
+                                      CHECKED_IN → NO_SHOW is semantically forbidden. */}
+                                  {appt.status === "CHECKED_IN" && onStatusChange && (
                                     <Button
                                       size="sm"
                                       variant="primary"
                                       className="text-[11px] h-7 px-2 bg-teal-600 hover:bg-teal-700"
+                                      disabled={isLoading}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         onStatusChange(appt.id, "IN_TREATMENT");
                                       }}
                                     >
-                                      Bắt đầu điều trị
+                                      {isLoading ? "..." : "Bắt đầu điều trị"}
                                     </Button>
+                                  )}
+                                  {appt.status === "IN_TREATMENT" && onStatusChange && (
                                     <Button
                                       size="sm"
-                                      variant="ghost"
-                                      className="text-[11px] h-7 px-2 text-rose-600 hover:bg-rose-50"
+                                      variant="primary"
+                                      className="text-[11px] h-7 px-2 bg-emerald-600 hover:bg-emerald-700"
+                                      disabled={isLoading}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        onStatusChange(appt.id, "NO_SHOW");
+                                        onStatusChange(appt.id, "COMPLETED");
                                       }}
                                     >
-                                      Vắng
+                                      {isLoading ? "..." : "Hoàn tất"}
                                     </Button>
-                                  </>
-                                )}
-                                {appt.status === "IN_TREATMENT" && onStatusChange && (
-                                  <Button
-                                    size="sm"
-                                    variant="primary"
-                                    className="text-[11px] h-7 px-2 bg-emerald-600 hover:bg-emerald-700"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onStatusChange(appt.id, "COMPLETED");
-                                    }}
-                                  >
-                                    Hoàn tất
-                                  </Button>
-                                )}
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </td>

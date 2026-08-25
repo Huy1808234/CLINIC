@@ -61,6 +61,7 @@ import { runPerfQueryIndexProductionHardening1Tests } from "./unit/perf-query-in
 import { runDeploymentRegionAlignment1Tests } from "./unit/deployment-region-alignment1.test";
 import { runReceptionToDoctorHandoffIntegrity1Tests } from "./unit/reception-to-doctor-handoff-integrity1.test";
 import { runTreatmentAttendanceWorkflow1Tests } from "./unit/treatment-attendance-workflow1.test";
+import { runTreatmentAttendanceHardening1Tests } from "./unit/treatment-attendance-hardening1.test";
 
 async function main() {
   try {
@@ -127,6 +128,7 @@ async function main() {
     runDeploymentRegionAlignment1Tests();
     runReceptionToDoctorHandoffIntegrity1Tests();
     runTreatmentAttendanceWorkflow1Tests();
+    runTreatmentAttendanceHardening1Tests();
     console.log("All unit test suites executed successfully.");
   } catch (err) {
     console.error("Test failure:", err);

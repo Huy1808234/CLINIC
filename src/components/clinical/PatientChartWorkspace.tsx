@@ -78,6 +78,7 @@ export const PatientChartWorkspace: React.FC<PatientChartWorkspaceProps> = ({
           <TreatmentHistoryAccordion
             treatmentCourses={treatment_courses}
             clinicalNotes={clinical_notes}
+            appointments={recent_appointments}
             activeCourseId={currentCourse?.id}
           />
         </div>

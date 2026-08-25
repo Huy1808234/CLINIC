@@ -21,6 +21,14 @@ import { DEFAULT_CLINIC_TIMEZONE } from "@/utils/timezone";
 export interface TreatmentHistoryAccordionProps {
   treatmentCourses: PatientTreatmentCourseSummaryItem[];
   clinicalNotes?: ClinicalNoteItem[];
+  appointments?: Array<{
+    id: string;
+    treatment_course_id: string;
+    appointment_date: string;
+    scheduled_start_at: string;
+    status: string;
+    doctor_name: string | null;
+  }>;
   activeCourseId?: string;
   clinicTimezone?: string;
 }
@@ -28,6 +36,7 @@ export interface TreatmentHistoryAccordionProps {
 export const TreatmentHistoryAccordion: React.FC<TreatmentHistoryAccordionProps> = ({
   treatmentCourses,
   clinicalNotes = [],
+  appointments = [],
   clinicTimezone = DEFAULT_CLINIC_TIMEZONE,
 }) => {
   if (!treatmentCourses || treatmentCourses.length === 0) {
@@ -83,6 +92,11 @@ export const TreatmentHistoryAccordion: React.FC<TreatmentHistoryAccordionProps>
     const plannedSessions = course.planned_session_count || 0;
 
     const courseNotes = clinicalNotes.filter((n) => n.treatment_course_id === course.id);
+
+    // Occurrence history from Appointments (sorted by date ascending)
+    const courseAppointments = appointments
+      .filter((a) => a.treatment_course_id === course.id)
+      .sort((a, b) => a.appointment_date.localeCompare(b.appointment_date));
 
     const header = (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 w-full pr-2 py-0.5">
@@ -210,6 +224,60 @@ export const TreatmentHistoryAccordion: React.FC<TreatmentHistoryAccordionProps>
               </div>
             </div>
           ) : null}
+
+          {/* Lịch sử từng buổi (Occurrence History from Appointments) */}
+          {courseAppointments.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <span className="text-slate-400 font-semibold block text-[11px] flex items-center gap-1">
+                <CalendarOutlined className="text-slate-400 text-xs" />
+                <span>Lịch sử buổi hẹn ({courseAppointments.length})</span>
+              </span>
+              <div className="space-y-1">
+                {courseAppointments.map((appt, idx) => {
+                  const apptDate = new Intl.DateTimeFormat("vi-VN").format(
+                    new Date(appt.appointment_date)
+                  );
+                  // Map appointment status to display label & color
+                  // IMPORTANT: NO_SHOW comes from Appointment.status (patient did not arrive).
+                  // A COMPLETED appointment always has exactly one corresponding treatment_session.
+                  // We never fabricate a treatment_session record for NO_SHOW.
+                  const statusLabel =
+                    appt.status === "COMPLETED"
+                      ? "Hoàn thành"
+                      : appt.status === "NO_SHOW"
+                      ? "Vắng"
+                      : appt.status === "CANCELLED"
+                      ? "Đã hủy"
+                      : appt.status === "IN_TREATMENT"
+                      ? "Đang điều trị"
+                      : appt.status === "CHECKED_IN"
+                      ? "Đã điểm danh"
+                      : "Chưa đến";
+                  const statusColor =
+                    appt.status === "COMPLETED"
+                      ? "success"
+                      : appt.status === "NO_SHOW" || appt.status === "CANCELLED"
+                      ? "error"
+                      : appt.status === "IN_TREATMENT" || appt.status === "CHECKED_IN"
+                      ? "processing"
+                      : "default";
+                  return (
+                    <div
+                      key={appt.id}
+                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs"
+                    >
+                      <span className="text-slate-500 font-medium">
+                        Buổi {idx + 1} · {apptDate}
+                      </span>
+                      <Tag color={statusColor} className="m-0 text-[10px] font-medium">
+                        {statusLabel}
+                      </Tag>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Ghi chú lâm sàng gắn với Liệu trình */}
           {courseNotes.length > 0 && (

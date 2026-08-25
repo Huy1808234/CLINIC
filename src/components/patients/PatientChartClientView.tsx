@@ -78,6 +78,7 @@ export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
           <TreatmentHistoryAccordion
             treatmentCourses={treatment_courses}
             clinicalNotes={clinical_notes}
+            appointments={recent_appointments}
             activeCourseId={currentCourse?.id}
           />
         </div>

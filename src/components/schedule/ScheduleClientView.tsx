@@ -39,6 +39,10 @@ export const ScheduleClientView: React.FC<ScheduleClientViewProps> = ({
   const [isAutoScheduleOpen, setIsAutoScheduleOpen] = useState<boolean>(false);
   const [autoScheduleDoctorId, setAutoScheduleDoctorId] = useState<string>("");
 
+  // Loading state: tracks which appointment is currently awaiting server confirmation.
+  // Canonical displayed status is NEVER mutated until server responds successfully.
+  const [loadingApptId, setLoadingApptId] = useState<string | null>(null);
+
   const [selectedCellInfo, setSelectedCellInfo] = useState<{
     cell: MonthMatrixCell;
     patientName: string;
@@ -136,40 +140,42 @@ export const ScheduleClientView: React.FC<ScheduleClientViewProps> = ({
       ) : (
         <DayTimelineGrid
           timelineData={timelineData}
+          loadingApptId={loadingApptId}
           onAppointmentClick={(appt) => {
             console.log("Appointment details:", appt);
           }}
           onStatusChange={async (apptId, newStatus) => {
-            const previousTimeline = timelineData;
-            // Optimistic update
-            setTimelineData((prev) => ({
-              ...prev,
-              slots: prev.slots.map((slot) => {
-                const updatedByDoctor: Record<string, AppointmentWithDetails[]> = {};
-                for (const [docId, appts] of Object.entries(slot.appointments_by_doctor)) {
-                  updatedByDoctor[docId] = appts.map((a) =>
-                    a.id === apptId ? { ...a, status: newStatus } : a
-                  );
-                }
-                return {
-                  ...slot,
-                  appointments_by_doctor: updatedByDoctor,
-                };
-              }),
-            }));
+            // Do NOT mutate canonical displayed status before server responds.
+            // Just mark which appointment is loading to disable action buttons.
+            setLoadingApptId(apptId);
 
-            // Call Server Action
-            const res = await updateAppointmentStatusAction({
-              appointment_id: apptId,
-              status: newStatus,
-            });
+            try {
+              const res = await updateAppointmentStatusAction({
+                appointment_id: apptId,
+                status: newStatus,
+              });
 
-            if (!res.success) {
-              // Rollback on failure
-              setTimelineData(previousTimeline);
-              message.error(res.error || "Không thể cập nhật trạng thái lịch hẹn.");
-            } else {
-              message.success("Cập nhật trạng thái thành công.");
+              if (!res.success) {
+                // Server rejected — canonical state unchanged, show error
+                message.error(res.error || "Không thể cập nhật trạng thái lịch hẹn.");
+              } else {
+                // Server succeeded — now update canonical timeline state
+                setTimelineData((prev) => ({
+                  ...prev,
+                  slots: prev.slots.map((slot) => {
+                    const updated: Record<string, AppointmentWithDetails[]> = {};
+                    for (const [docId, appts] of Object.entries(slot.appointments_by_doctor)) {
+                      updated[docId] = appts.map((a) =>
+                        a.id === apptId ? { ...a, status: newStatus } : a
+                      );
+                    }
+                    return { ...slot, appointments_by_doctor: updated };
+                  }),
+                }));
+                message.success("Cập nhật trạng thái thành công.");
+              }
+            } finally {
+              setLoadingApptId(null);
             }
           }}
         />

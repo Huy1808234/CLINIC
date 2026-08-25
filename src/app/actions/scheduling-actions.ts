@@ -214,8 +214,10 @@ const ALLOWED_STATUS_TRANSITIONS: Record<
       allowedRoles: ["RECEPTIONIST", "ADMIN"],
     },
     {
+      // NO_SHOW only valid from PLANNED (patient never arrived)
+      // RECEPTIONIST and ADMIN only — Doctor does not mark no-show
       targetStatus: "NO_SHOW",
-      allowedRoles: ["RECEPTIONIST", "ADMIN", "DOCTOR"],
+      allowedRoles: ["RECEPTIONIST", "ADMIN"],
     },
     {
       targetStatus: "CANCELLED",
@@ -227,10 +229,8 @@ const ALLOWED_STATUS_TRANSITIONS: Record<
       targetStatus: "IN_TREATMENT",
       allowedRoles: ["DOCTOR", "TECHNICIAN", "Y_SI"],
     },
-    {
-      targetStatus: "NO_SHOW",
-      allowedRoles: ["RECEPTIONIST", "ADMIN", "DOCTOR"],
-    },
+    // CHECKED_IN -> NO_SHOW is FORBIDDEN: patient has already arrived (checked in)
+    // NO_SHOW semantics = patient did not arrive; not an attendance correction mechanism
     {
       targetStatus: "CANCELLED",
       allowedRoles: ["RECEPTIONIST", "ADMIN"],
