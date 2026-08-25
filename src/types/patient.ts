@@ -129,6 +129,9 @@ export interface PatientHistorySummary {
   recent_receptions?: PatientReceptionSummaryItem[];
 }
 
+export type PatientTreatmentCourseSummaryItem = PatientHistorySummary["treatment_courses"][number];
+export type PatientCourseDiagnosisSummaryItem = CourseDiagnosisSummaryItem;
+
 export type DeduplicationMatchPriority =
   | "EXACT_BHYT"
   | "EXACT_CCCD"

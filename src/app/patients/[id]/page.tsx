@@ -33,8 +33,8 @@ export default async function PatientDetailsPage({ params }: PatientDetailsPageP
 
   return (
     <AppShell
-      title="Hồ Sơ Bệnh Nhân"
-      subtitle={`Mã BN: ${history.patient.patient_code}`}
+      title="Bác sĩ / Hồ sơ bệnh nhân"
+      subtitle={`Mã BN: ${history.patient.patient_code} · ${history.patient.full_name}`}
       actions={
         <Link href="/patients">
           <Button size="sm" variant="outline">

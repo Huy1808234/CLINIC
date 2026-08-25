@@ -3,25 +3,24 @@
 import React, { useState } from "react";
 import type { PatientHistorySummary } from "@/types/patient";
 import type { DiagnosisCatalogItem, ServiceCatalogItem } from "@/types/catalog";
-import { PatientHeroSummaryCard } from "@/components/patients/PatientHeroSummaryCard";
-import { CurrentVisitCard } from "@/components/patients/CurrentVisitCard";
-import { StartExaminationPanel } from "@/components/patients/StartExaminationPanel";
-import { PatientStatsSummaryCard } from "@/components/patients/PatientStatsSummaryCard";
-import { LatestDiagnosisCard } from "@/components/patients/LatestDiagnosisCard";
-import { CurrentCourseSummaryCard } from "@/components/patients/CurrentCourseSummaryCard";
-import { TreatmentHistoryAccordion } from "@/components/patients/TreatmentHistoryAccordion";
-import { PatientNotesCard } from "@/components/patients/PatientNotesCard";
+import { PatientHeroSummaryCard } from "./PatientHeroSummaryCard";
+import { CurrentVisitCard } from "./CurrentVisitCard";
+import { StartExaminationPanel } from "./StartExaminationPanel";
+import { PatientStatsSummaryCard } from "./PatientStatsSummaryCard";
+import { LatestDiagnosisCard } from "./LatestDiagnosisCard";
+import { CurrentCourseSummaryCard } from "./CurrentCourseSummaryCard";
+import { TreatmentHistoryAccordion } from "./TreatmentHistoryAccordion";
+import { PatientNotesCard } from "./PatientNotesCard";
 import { RecentAppointmentsCard } from "@/components/clinical/RecentAppointmentsCard";
-import { DoctorCurrentExamWorkspace } from "@/components/clinical/DoctorCurrentExamWorkspace";
 
-export interface PatientChartWorkspaceProps {
+export interface PatientChartClientViewProps {
   history: PatientHistorySummary;
   diagnosesCatalog: DiagnosisCatalogItem[];
   servicesCatalog: ServiceCatalogItem[];
   isDoctor: boolean;
 }
 
-export const PatientChartWorkspace: React.FC<PatientChartWorkspaceProps> = ({
+export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
   history,
   diagnosesCatalog,
   servicesCatalog,
@@ -40,18 +39,18 @@ export const PatientChartWorkspace: React.FC<PatientChartWorkspaceProps> = ({
   const latestMeasurement = measurements[0];
   const latestReception = recent_receptions?.[0];
 
-  // Resolve current course
+  // Resolve the canonical current course (highest course_no / active course)
   const currentCourse = treatment_courses.length > 0 ? treatment_courses[0] : null;
 
-  // Progressive disclosure for starting examination
+  // Start exam state for progressive disclosure
   const [isExamStarted, setIsExamStarted] = useState<boolean>(false);
 
-  // Extract latest primary diagnosis
+  // Extract latest primary diagnosis across courses
   const latestPrimaryDiag = currentCourse?.course_diagnoses?.find((d) => d.is_primary) || null;
 
   return (
     <div className="w-full space-y-6">
-      {/* 1. PATIENT HERO SUMMARY (Top Card) */}
+      {/* 1. PATIENT HERO SUMMARY (Full-Width Top Card) */}
       <PatientHeroSummaryCard
         patient={patient}
         currentInsurance={currentInsurance}
@@ -65,28 +64,16 @@ export const PatientChartWorkspace: React.FC<PatientChartWorkspaceProps> = ({
           {/* Buổi khám hiện tại */}
           <CurrentVisitCard recentReception={latestReception} />
 
-          {/* CTA Bắt đầu khám / Active Clinical Workspace */}
-          {!isExamStarted ? (
-            <StartExaminationPanel
-              currentCourse={currentCourse}
-              diagnosesCatalog={diagnosesCatalog}
-              servicesCatalog={servicesCatalog}
-              isDoctor={isDoctor}
-              isExamStarted={false}
-              onStartExam={() => setIsExamStarted(true)}
-            />
-          ) : currentCourse ? (
-            <DoctorCurrentExamWorkspace
-              currentCourse={currentCourse}
-              diagnosesCatalog={diagnosesCatalog}
-              servicesCatalog={servicesCatalog}
-              isDoctor={isDoctor}
-            />
-          ) : (
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-8 text-center text-xs text-slate-400">
-              Bệnh nhân chưa có liệu trình điều trị nào được khởi tạo.
-            </div>
-          )}
+          {/* Khối CTA Bắt đầu khám / Active Clinical Workspace */}
+          <StartExaminationPanel
+            currentCourse={currentCourse}
+            diagnosesCatalog={diagnosesCatalog}
+            servicesCatalog={servicesCatalog}
+            isDoctor={isDoctor}
+            isExamStarted={isExamStarted}
+            onStartExam={() => setIsExamStarted(true)}
+            onCollapseExam={() => setIsExamStarted(false)}
+          />
 
           {/* Thông tin tóm tắt (3 metrics: Tổng số liệu trình, Tổng số buổi, Buổi hoàn tất) */}
           <PatientStatsSummaryCard treatmentCourses={treatment_courses} />
