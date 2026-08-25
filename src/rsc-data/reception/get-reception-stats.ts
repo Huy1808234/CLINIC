@@ -13,30 +13,32 @@ export async function getReceptionStats(targetDate?: string): Promise<ReceptionS
   const todayDateStr = targetDate || getClinicTodayDate(timeZone);
   const { startUtc, endUtc } = getUtcBoundsForClinicDate(todayDateStr, timeZone);
 
-  let query = supabase
+  let recQuery = supabase
     .from("receptions")
     .select("patient_relation_type")
     .gte("arrived_at", startUtc)
     .lt("arrived_at", endUtc);
 
   if (clinicId) {
-    query = query.eq("clinic_id", clinicId);
+    recQuery = recQuery.eq("clinic_id", clinicId);
   }
 
-  const { data: todayReceptions } = await query;
-
-  const records = todayReceptions || [];
-  const total = records.length;
-  const newPatients = records.filter((r) => r.patient_relation_type === "NEW").length;
-  const returningPatients = records.filter((r) => r.patient_relation_type === "RETURNING").length;
-
-  // Active appointments today count
-  const { data: todayAppts } = await supabase
+  const apptQuery = supabase
     .from("appointments")
     .select("status")
     .eq("appointment_date", todayDateStr);
 
-  const appts = todayAppts || [];
+  const [recRes, apptRes] = await Promise.all([
+    recQuery,
+    apptQuery,
+  ]);
+
+  const records = recRes.data || [];
+  const total = records.length;
+  const newPatients = records.filter((r) => r.patient_relation_type === "NEW").length;
+  const returningPatients = records.filter((r) => r.patient_relation_type === "RETURNING").length;
+
+  const appts = apptRes.data || [];
   const waitingExam = appts.filter((a) => a.status === "CHECKED_IN" || a.status === "PLANNED").length;
   const inTreatment = appts.filter((a) => a.status === "IN_TREATMENT" || a.status === "IN_EXAM").length;
   const completed = appts.filter((a) => a.status === "COMPLETED").length;

@@ -57,6 +57,7 @@ import { runAppshellHeaderIdentityRedesign1Tests } from "./unit/appshell-header-
 import { runDoctorClinicalNotes1Tests } from "./unit/doctor-clinical-notes1.test";
 import { runDoctorClinicalNotesHardening1Tests } from "./unit/doctor-clinical-notes-hardening1.test";
 import { runDoctorClinicalOrderComboboxUx2Tests } from "./unit/doctor-clinical-order-combobox-ux2.test";
+import { runPerfQueryIndexProductionHardening1Tests } from "./unit/perf-query-index-production-hardening1.test";
 
 async function main() {
   try {
@@ -119,6 +120,7 @@ async function main() {
     runDoctorClinicalNotes1Tests();
     runDoctorClinicalNotesHardening1Tests();
     runDoctorClinicalOrderComboboxUx2Tests();
+    runPerfQueryIndexProductionHardening1Tests();
     console.log("All unit test suites executed successfully.");
   } catch (err) {
     console.error("Test failure:", err);

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { AuthenticationRequiredError } from "./auth-resolver";
 import {
@@ -42,9 +43,11 @@ export interface ApplicationAccessContext {
  *
  * Returns `null` if unauthenticated, unlinked, inactive, or no active clinic is selected.
  *
+ * Wrapped with React `cache()` for request-scoped deduplication.
+ *
  * @returns Verified `ApplicationAccessContext` or `null`.
  */
-export async function getApplicationAccessContext(): Promise<ApplicationAccessContext | null> {
+export const getApplicationAccessContext = cache(async (): Promise<ApplicationAccessContext | null> => {
   const staff = await getCurrentStaff();
   if (!staff) {
     return null;
@@ -71,7 +74,7 @@ export async function getApplicationAccessContext(): Promise<ApplicationAccessCo
       timezone: clinic.timezone || "Asia/Ho_Chi_Minh",
     },
   };
-}
+});
 
 /**
  * Enforces and returns the verified Application Access Context for the current request.
@@ -82,9 +85,12 @@ export async function getApplicationAccessContext(): Promise<ApplicationAccessCo
  * 3. Active Clinic Memberships (`getCurrentStaffClinicMemberships`) -> throws `StaffNoActiveClinicError`
  * 4. Active Clinic Selection (`getActiveClinicContext`) -> throws `NoActiveClinicSelectedError` / `StaffClinicAccessDeniedError`
  *
+ * Wrapped with React `cache()` for request-scoped deduplication across
+ * Server Component render trees in a single HTTP request.
+ *
  * @returns Verified `ApplicationAccessContext`.
  */
-export async function requireApplicationAccessContext(): Promise<ApplicationAccessContext> {
+export const requireApplicationAccessContext = cache(async (): Promise<ApplicationAccessContext> => {
   const staff = await requireCurrentStaff();
   const clinic = await requireActiveClinic();
 
@@ -104,7 +110,7 @@ export async function requireApplicationAccessContext(): Promise<ApplicationAcce
       timezone: clinic.timezone || "Asia/Ho_Chi_Minh",
     },
   };
-}
+});
 
 function isNextRedirectError(error: unknown): boolean {
   if (typeof error === "object" && error !== null && "digest" in error) {
@@ -125,9 +131,11 @@ function isNextRedirectError(error: unknown): boolean {
  *
  * Unexpected infrastructure or database errors are re-thrown so they are not masked as login redirects.
  *
+ * Wrapped with React `cache()` for request-scoped deduplication.
+ *
  * @returns Verified `ApplicationAccessContext`.
  */
-export async function requireApplicationPageAccessContext(): Promise<ApplicationAccessContext> {
+export const requireApplicationPageAccessContext = cache(async (): Promise<ApplicationAccessContext> => {
   try {
     return await requireApplicationAccessContext();
   } catch (error: unknown) {
@@ -159,5 +167,5 @@ export async function requireApplicationPageAccessContext(): Promise<Application
     // Re-throw any other error (StaffNotLinkedError, StaffInactiveError, DB errors, etc.)
     throw error;
   }
-}
+});
 

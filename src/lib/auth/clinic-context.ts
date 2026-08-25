@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import {
   getCurrentStaffClinicMemberships,
@@ -101,9 +102,11 @@ export async function setActiveClinicCookie(clinicId: string): Promise<ActiveCli
  * Verification Pipeline:
  * cookie clinic_id -> resolve current staff memberships (AUTH1.3) -> verify match -> return ActiveClinicIdentity.
  *
+ * Wrapped with React `cache()` for request-scoped deduplication.
+ *
  * @returns Verified `ActiveClinicIdentity` or `null` if no cookie set or membership revoked.
  */
-export async function getActiveClinicContext(): Promise<ActiveClinicIdentity | null> {
+export const getActiveClinicContext = cache(async (): Promise<ActiveClinicIdentity | null> => {
   const cookieClinicId = await getActiveClinicIdFromCookie();
   if (!cookieClinicId) {
     return null;
@@ -125,7 +128,7 @@ export async function getActiveClinicContext(): Promise<ActiveClinicIdentity | n
     membership_id: matched.membership_id,
     timezone: matched.timezone || "Asia/Ho_Chi_Minh",
   };
-}
+});
 
 /**
  * Requires a verified active clinic selection for operations that require a clinic context.
@@ -136,11 +139,13 @@ export async function getActiveClinicContext(): Promise<ActiveClinicIdentity | n
  * 3. Active Clinic Memberships (AUTH1.3)
  * 4. Cookie Clinic ID is present and matches an authorized membership.
  *
+ * Wrapped with React `cache()` for request-scoped deduplication.
+ *
  * @returns Verified `ActiveClinicIdentity`.
  * @throws `NoActiveClinicSelectedError` if no clinic has been selected.
  * @throws `StaffClinicAccessDeniedError` if the selected clinic is unauthorized or revoked.
  */
-export async function requireActiveClinic(): Promise<ActiveClinicIdentity> {
+export const requireActiveClinic = cache(async (): Promise<ActiveClinicIdentity> => {
   const authorizedMemberships = await requireCurrentStaffClinicMemberships();
   const cookieClinicId = await getActiveClinicIdFromCookie();
 
@@ -163,7 +168,7 @@ export async function requireActiveClinic(): Promise<ActiveClinicIdentity> {
     membership_id: matched.membership_id,
     timezone: matched.timezone || "Asia/Ho_Chi_Minh",
   };
-}
+});
 
 /**
  * Clears the active clinic selection cookie.

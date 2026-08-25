@@ -12,92 +12,206 @@ import type {
 export async function getPatientHistory(patientId: string): Promise<PatientHistorySummary | null> {
   const supabase = await createClient();
 
-  const { data: patient } = await supabase
+  // 1. Resolve patient primary record with explicit projection
+  const { data: patient, error: patientError } = await supabase
     .from("patients")
-    .select("*")
+    .select(`
+      id,
+      patient_code,
+      full_name,
+      normalized_name,
+      phone,
+      citizen_id,
+      citizen_id_issued_at,
+      citizen_id_issued_by,
+      birth_date,
+      birth_year,
+      dob_precision,
+      sex,
+      address,
+      occupation,
+      notes,
+      is_active,
+      created_at,
+      updated_at
+    `)
     .eq("id", patientId)
     .maybeSingle();
 
-  if (!patient) return null;
+  if (patientError || !patient) return null;
 
-  // 1. Insurance cards history
-  const { data: insuranceCards } = await supabase
-    .from("patient_insurance_cards")
-    .select("*")
-    .eq("patient_id", patientId)
-    .order("created_at", { ascending: false });
+  // 2. Concurrently fetch all independent patient clinical sub-collections in a single parallel roundtrip
+  const [
+    insuranceRes,
+    measurementRes,
+    alertRes,
+    courseRes,
+    appointmentRes,
+    receptionRes,
+    noteRes,
+  ] = await Promise.all([
+    // 1. Insurance cards history (explicit columns + deterministic ordering)
+    supabase
+      .from("patient_insurance_cards")
+      .select(`
+        id,
+        patient_id,
+        card_number,
+        issue_date,
+        expiration_date,
+        initial_healthcare_code,
+        initial_healthcare_name,
+        is_current,
+        notes,
+        created_at
+      `)
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false }),
 
-  // 2. Measurement history
-  const { data: measurements } = await supabase
-    .from("patient_measurements")
-    .select("*")
-    .eq("patient_id", patientId)
-    .order("measured_at", { ascending: false });
+    // 2. Measurement history (explicit columns + deterministic ordering)
+    supabase
+      .from("patient_measurements")
+      .select(`
+        id,
+        patient_id,
+        blood_pressure_systolic,
+        blood_pressure_diastolic,
+        heart_rate,
+        temperature,
+        height,
+        weight,
+        bmi,
+        notes,
+        measured_at,
+        created_at
+      `)
+      .eq("patient_id", patientId)
+      .order("measured_at", { ascending: false })
+      .order("id", { ascending: false }),
 
-  // 3. Alerts
-  const { data: alerts } = await supabase
-    .from("patient_alerts")
-    .select("*")
-    .eq("patient_id", patientId)
-    .order("created_at", { ascending: false });
+    // 3. Alerts (explicit columns + deterministic ordering)
+    supabase
+      .from("patient_alerts")
+      .select(`
+        id,
+        patient_id,
+        alert_type,
+        alert_level,
+        message,
+        is_active,
+        created_at
+      `)
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false }),
 
-  // 4. Treatment courses with doctor and orders
-  const { data: courses } = await supabase
-    .from("treatment_courses")
-    .select(`
-      *,
-      staff:primary_doctor_id(full_name),
-      planned_by_doctor:planned_by_doctor_id(full_name),
-      course_diagnoses(id, diagnosis_id, raw_code, raw_text, diagnosis_type, is_primary),
-      course_service_orders(id, service_id, sequence_no, is_active, service_catalog(id, service_code, service_name))
-    `)
-    .eq("patient_id", patientId)
-    .order("course_no", { ascending: false });
+    // 4. Treatment courses with doctor, diagnoses, and orders
+    supabase
+      .from("treatment_courses")
+      .select(`
+        id,
+        patient_id,
+        clinic_id,
+        course_no,
+        start_date,
+        status,
+        adherence_status,
+        primary_doctor_id,
+        planned_by_doctor_id,
+        planned_session_count,
+        completed_session_count,
+        planned_at,
+        started_at,
+        completed_at,
+        notes,
+        created_at,
+        updated_at,
+        staff:primary_doctor_id(full_name),
+        planned_by_doctor:planned_by_doctor_id(full_name),
+        course_diagnoses(id, diagnosis_id, raw_code, raw_text, diagnosis_type, is_primary),
+        course_service_orders(id, service_id, sequence_no, is_active, service_catalog(id, service_code, service_name))
+      `)
+      .eq("patient_id", patientId)
+      .order("course_no", { ascending: false }),
 
-  // 5. Recent appointments
-  const { data: appointments } = await supabase
-    .from("appointments")
-    .select(`
-      *,
-      staff:doctor_id(full_name)
-    `)
-    .eq("patient_id", patientId)
-    .order("appointment_date", { ascending: false })
-    .limit(20);
+    // 5. Recent appointments (bounded + explicit columns)
+    supabase
+      .from("appointments")
+      .select(`
+        id,
+        patient_id,
+        treatment_course_id,
+        doctor_id,
+        appointment_date,
+        scheduled_start_at,
+        scheduled_end_at,
+        status,
+        schedule_source,
+        notes,
+        created_at,
+        staff:doctor_id(full_name)
+      `)
+      .eq("patient_id", patientId)
+      .order("appointment_date", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(20),
 
-  // 6. Recent receptions (Current visit context)
-  const { data: receptions } = await supabase
-    .from("receptions")
-    .select(`
-      *,
-      staff:created_by(full_name)
-    `)
-    .eq("patient_id", patientId)
-    .order("registered_at", { ascending: false })
-    .limit(5);
+    // 6. Recent receptions (bounded + explicit columns)
+    supabase
+      .from("receptions")
+      .select(`
+        id,
+        patient_id,
+        clinic_id,
+        insurance_card_id,
+        arrived_at,
+        registered_at,
+        reception_source,
+        patient_relation_type,
+        reason_for_visit,
+        notes,
+        created_at,
+        staff:created_by(full_name)
+      `)
+      .eq("patient_id", patientId)
+      .order("registered_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(5),
 
-  // 7. Recent clinical notes (Doctor observations, bounded to latest 4 rows for main card + total count)
-  const { data: clinicalNotes, count: totalClinicalNotesCount } = await supabase
-    .from("clinical_notes")
-    .select(`
-      id,
-      patient_id,
-      clinic_id,
-      organization_id,
-      treatment_course_id,
-      reception_id,
-      author_staff_id,
-      content,
-      created_at,
-      updated_at,
-      staff:author_staff_id(full_name),
-      treatment_courses:treatment_course_id(course_no)
-    `, { count: "exact" })
-    .eq("patient_id", patientId)
-    .order("created_at", { ascending: false })
-    .limit(4);
+    // 7. Recent clinical notes (bounded to latest 4 rows for main card + total count)
+    supabase
+      .from("clinical_notes")
+      .select(`
+        id,
+        patient_id,
+        clinic_id,
+        organization_id,
+        treatment_course_id,
+        reception_id,
+        author_staff_id,
+        content,
+        created_at,
+        updated_at,
+        staff:author_staff_id(full_name),
+        treatment_courses:treatment_course_id(course_no)
+      `, { count: "exact" })
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(4),
+  ]);
 
-  const formattedCourses = ((courses as unknown as Array<Record<string, unknown>>) || []).map((c) => {
+  const insuranceCards = insuranceRes.data || [];
+  const measurements = measurementRes.data || [];
+  const alerts = alertRes.data || [];
+  const courses = courseRes.data || [];
+  const appointments = appointmentRes.data || [];
+  const receptions = receptionRes.data || [];
+  const clinicalNotes = noteRes.data || [];
+  const totalClinicalNotesCount = noteRes.count ?? clinicalNotes.length;
+
+  const formattedCourses = (courses as unknown as Array<Record<string, unknown>>).map((c) => {
     const doctorName = (c.staff as { full_name?: string } | null)?.full_name || null;
     const plannedByDoctorName = (c.planned_by_doctor as { full_name?: string } | null)?.full_name || null;
 
@@ -162,7 +276,7 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     };
   });
 
-  const formattedAppointments = ((appointments as unknown as Array<Record<string, unknown>>) || []).map((a) => {
+  const formattedAppointments = (appointments as unknown as Array<Record<string, unknown>>).map((a) => {
     const doctorName = (a.staff as { full_name?: string } | null)?.full_name || null;
     return {
       id: a.id as string,
@@ -174,7 +288,7 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     };
   });
 
-  const formattedReceptions = ((receptions as unknown as Array<Record<string, unknown>>) || []).map((r) => {
+  const formattedReceptions = (receptions as unknown as Array<Record<string, unknown>>).map((r) => {
     const createdByName = (r.staff as { full_name?: string } | null)?.full_name || null;
     return {
       id: r.id as string,
@@ -187,7 +301,7 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     };
   });
 
-  const formattedClinicalNotes: ClinicalNoteItem[] = ((clinicalNotes as unknown as Array<Record<string, unknown>>) || []).map((n) => {
+  const formattedClinicalNotes: ClinicalNoteItem[] = (clinicalNotes as unknown as Array<Record<string, unknown>>).map((n) => {
     const authorName = (n.staff as { full_name?: string } | null)?.full_name || "Bác sĩ";
     const courseNo = (n.treatment_courses as { course_no?: number } | null)?.course_no || null;
     return {
@@ -215,6 +329,6 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     recent_appointments: formattedAppointments,
     recent_receptions: formattedReceptions,
     clinical_notes: formattedClinicalNotes,
-    clinical_notes_total_count: totalClinicalNotesCount ?? formattedClinicalNotes.length,
+    clinical_notes_total_count: totalClinicalNotesCount,
   };
 }

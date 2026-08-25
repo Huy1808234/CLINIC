@@ -26,16 +26,7 @@ export async function getMonthScheduleMatrix(monthStr?: string): Promise<MonthMa
 
   const supabase = await createClient();
 
-  // 1. Fetch active doctors
-  const { data: doctors } = await supabase
-    .from("staff")
-    .select("id, staff_code, full_name")
-    .eq("role_type", "DOCTOR")
-    .eq("is_active", true)
-    .order("full_name", { ascending: true });
-
-  // 2. Fetch all appointments in this month
-  const { data: appointments } = await supabase
+  const apptQuery = supabase
     .from("appointments")
     .select(`
       id,
@@ -53,9 +44,22 @@ export async function getMonthScheduleMatrix(monthStr?: string): Promise<MonthMa
     .gte("appointment_date", startDate)
     .lte("appointment_date", endDate)
     .neq("status", "CANCELLED")
-    .order("scheduled_start_at", { ascending: true });
+    .order("scheduled_start_at", { ascending: true })
+    .order("id", { ascending: true });
 
-  const apptList = (appointments as unknown as Array<Record<string, unknown>>) || [];
+  // Concurrently fetch active doctors and appointments in parallel
+  const [docRes, apptRes] = await Promise.all([
+    supabase
+      .from("staff")
+      .select("id, staff_code, full_name")
+      .eq("role_type", "DOCTOR")
+      .eq("is_active", true)
+      .order("full_name", { ascending: true }),
+    apptQuery,
+  ]);
+
+  const doctors = docRes.data || [];
+  const apptList = (apptRes.data as unknown as Array<Record<string, unknown>>) || [];
 
   // Group appointments by doctor
   const doctorBlocks: MonthMatrixDoctorBlock[] = ((doctors as Array<{ id: string; staff_code: string; full_name: string }>) || []).map((doc) => {

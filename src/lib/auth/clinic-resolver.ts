@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/supabase-clients/server";
 import { getCurrentStaff, requireCurrentStaff } from "./staff-resolver";
 
@@ -40,9 +41,12 @@ export interface StaffClinicMembershipIdentity {
  * - Does NOT load roles or permissions (deferred to future Goal).
  * - Does NOT auto-select or store an active clinic context.
  *
+ * Wrapped with React `cache()` for request-scoped deduplication across
+ * Server Component render trees in a single HTTP request.
+ *
  * @returns Array of active `StaffClinicMembershipIdentity` records, or empty array if unauthenticated/unlinked/no active clinics.
  */
-export async function getCurrentStaffClinicMemberships(): Promise<StaffClinicMembershipIdentity[]> {
+export const getCurrentStaffClinicMemberships = cache(async (): Promise<StaffClinicMembershipIdentity[]> => {
   const currentStaff = await getCurrentStaff();
   if (!currentStaff) {
     return [];
@@ -107,7 +111,7 @@ export async function getCurrentStaffClinicMemberships(): Promise<StaffClinicMem
     console.error("Failed to resolve current staff clinic memberships:", err);
     return [];
   }
-}
+});
 
 /**
  * Requires the currently authenticated staff member to possess at least one active clinic membership.
@@ -118,10 +122,12 @@ export async function getCurrentStaffClinicMemberships(): Promise<StaffClinicMem
  * 3. Active Staff Status (throws `StaffInactiveError` if inactive, 403)
  * 4. At least one Active Clinic Membership (throws `StaffNoActiveClinicError` if 0 memberships, 403)
  *
+ * Wrapped with React `cache()` for request-scoped deduplication.
+ *
  * @returns Non-empty array of active `StaffClinicMembershipIdentity` records.
  * @throws `AuthenticationRequiredError` | `StaffNotLinkedError` | `StaffInactiveError` | `StaffNoActiveClinicError`
  */
-export async function requireCurrentStaffClinicMemberships(): Promise<StaffClinicMembershipIdentity[]> {
+export const requireCurrentStaffClinicMemberships = cache(async (): Promise<StaffClinicMembershipIdentity[]> => {
   // Enforces valid, linked, active staff
   await requireCurrentStaff();
 
@@ -132,4 +138,4 @@ export async function requireCurrentStaffClinicMemberships(): Promise<StaffClini
   }
 
   return memberships;
-}
+});

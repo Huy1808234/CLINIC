@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/supabase-clients/server";
 import { getCurrentAuthUser, requireAuthenticatedUser } from "./auth-resolver";
 
@@ -69,9 +70,12 @@ export interface StaffIdentity {
  * Resolves ONLY via exact foreign key match (`staff.user_id = auth.users.id`).
  * NEVER attempts automatic or heuristic matching by email, phone, or name.
  *
+ * Wrapped with React `cache()` for request-scoped deduplication across
+ * Server Component render trees in a single HTTP request.
+ *
  * @returns The linked `StaffIdentity` or `null` if unauthenticated or unlinked.
  */
-export async function getCurrentStaff(): Promise<StaffIdentity | null> {
+export const getCurrentStaff = cache(async (): Promise<StaffIdentity | null> => {
   const authUser = await getCurrentAuthUser();
   if (!authUser) {
     return null;
@@ -105,7 +109,7 @@ export async function getCurrentStaff(): Promise<StaffIdentity | null> {
     console.error("Failed to query linked staff by user_id:", err);
     return null;
   }
-}
+});
 
 /**
  * Requires a valid authenticated user with an active, linked, setup-completed Staff Master profile.
@@ -116,10 +120,12 @@ export async function getCurrentStaff(): Promise<StaffIdentity | null> {
  * 3. Authenticated and linked but inactive -> throws `StaffInactiveError` (code: "STAFF_INACTIVE", 403)
  * 4. Authenticated and linked but initial password setup pending -> throws `AccountSetupRequiredError` (code: "ACCOUNT_SETUP_REQUIRED", 403)
  *
+ * Wrapped with React `cache()` for request-scoped deduplication.
+ *
  * @returns The verified active `StaffIdentity`.
  * @throws `AuthenticationRequiredError` | `StaffNotLinkedError` | `StaffInactiveError` | `AccountSetupRequiredError`
  */
-export async function requireCurrentStaff(): Promise<StaffIdentity> {
+export const requireCurrentStaff = cache(async (): Promise<StaffIdentity> => {
   const authUser = await requireAuthenticatedUser();
 
   const supabase = await createClient();
@@ -154,4 +160,4 @@ export async function requireCurrentStaff(): Promise<StaffIdentity> {
     auth_setup_completed_at: staff.auth_setup_completed_at ?? null,
     created_at: staff.created_at,
   };
-}
+});

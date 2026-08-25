@@ -16,10 +16,26 @@ export async function getTodayReceptions(targetDate?: string): Promise<Reception
 
   let query = supabase
     .from("receptions")
-    .select("*")
+    .select(`
+      id,
+      patient_id,
+      clinic_id,
+      insurance_card_id,
+      arrived_at,
+      registered_at,
+      reception_source,
+      patient_relation_type,
+      paper_file_status,
+      his_import_status,
+      reason_for_visit,
+      notes,
+      created_by,
+      created_at
+    `)
     .gte("arrived_at", startUtc)
     .lt("arrived_at", endUtc)
-    .order("arrived_at", { ascending: false });
+    .order("arrived_at", { ascending: false })
+    .order("id", { ascending: false });
 
   if (clinicId) {
     query = query.eq("clinic_id", clinicId);
@@ -34,37 +50,67 @@ export async function getTodayReceptions(targetDate?: string): Promise<Reception
   const patientIds = receptions.map((r) => r.patient_id);
   if (patientIds.length === 0) return [];
 
-  // Fetch patients
-  const { data: patients } = await supabase
-    .from("patients")
-    .select("*")
-    .in("id", patientIds);
+  // Concurrently fetch patients, insurance cards, and active courses in parallel
+  const [patientsRes, insurancesRes, coursesRes] = await Promise.all([
+    supabase
+      .from("patients")
+      .select(`
+        id,
+        patient_code,
+        full_name,
+        normalized_name,
+        phone,
+        citizen_id,
+        citizen_id_issued_at,
+        citizen_id_issued_by,
+        birth_date,
+        birth_year,
+        dob_precision,
+        sex,
+        address,
+        occupation,
+        notes,
+        is_active,
+        created_at,
+        updated_at
+      `)
+      .in("id", patientIds),
 
-  // Fetch active insurance cards
-  const { data: insurances } = await supabase
-    .from("patient_insurance_cards")
-    .select("*")
-    .in("patient_id", patientIds)
-    .eq("is_current", true);
+    supabase
+      .from("patient_insurance_cards")
+      .select(`
+        id,
+        patient_id,
+        card_number,
+        issue_date,
+        expiration_date,
+        initial_healthcare_code,
+        initial_healthcare_name,
+        is_current,
+        notes,
+        created_at
+      `)
+      .in("patient_id", patientIds)
+      .eq("is_current", true),
 
-  // Fetch active treatment courses
-  const { data: courses } = await supabase
-    .from("treatment_courses")
-    .select(`
-      id,
-      patient_id,
-      course_no,
-      planned_session_count,
-      completed_session_count,
-      status,
-      staff:primary_doctor_id(full_name)
-    `)
-    .in("patient_id", patientIds)
-    .eq("status", "ACTIVE");
+    supabase
+      .from("treatment_courses")
+      .select(`
+        id,
+        patient_id,
+        course_no,
+        planned_session_count,
+        completed_session_count,
+        status,
+        staff:primary_doctor_id(full_name)
+      `)
+      .in("patient_id", patientIds)
+      .eq("status", "ACTIVE"),
+  ]);
 
-  const typedPatients = (patients as unknown as Patient[]) || [];
-  const typedInsurances = (insurances as unknown as PatientInsuranceCard[]) || [];
-  const typedCourses = (courses as unknown as Array<Record<string, unknown>>) || [];
+  const typedPatients = (patientsRes.data as unknown as Patient[]) || [];
+  const typedInsurances = (insurancesRes.data as unknown as PatientInsuranceCard[]) || [];
+  const typedCourses = (coursesRes.data as unknown as Array<Record<string, unknown>>) || [];
 
   return (receptions as unknown as ReceptionEncounter[]).map((rec) => {
     const p = typedPatients.find((pt) => pt.id === rec.patient_id);

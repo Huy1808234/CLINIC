@@ -14,8 +14,10 @@ export const metadata = {
 
 export default async function HomePage() {
   const accessContext = await requireApplicationPageAccessContext();
-  const activeRoles = await getCurrentStaffRolesForClinic(accessContext.clinic.clinic_id);
-  const stats = await getReceptionStats();
+  const [activeRoles, stats] = await Promise.all([
+    getCurrentStaffRolesForClinic(accessContext.clinic.clinic_id),
+    getReceptionStats(),
+  ]);
 
   return (
     <AppShell

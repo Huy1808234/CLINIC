@@ -13,31 +13,47 @@ export async function getDayTimeline(dateStr: string): Promise<DayTimelineData> 
   const clinicContext = await getActiveClinicContext();
   const clinicTimezone = clinicContext?.timezone || DEFAULT_CLINIC_TIMEZONE;
 
-  // 1. Fetch active doctors
-  const { data: doctors } = await supabase
-    .from("staff")
-    .select("id, staff_code, full_name")
-    .eq("role_type", "DOCTOR")
-    .eq("is_active", true)
-    .order("full_name", { ascending: true });
-
-  const docList = (doctors as Array<{ id: string; staff_code: string; full_name: string }>) || [];
-
-  // 2. Fetch appointments for this day
-  const { data: appointments } = await supabase
+  const apptQuery = supabase
     .from("appointments")
     .select(`
-      *,
+      id,
+      patient_id,
+      treatment_course_id,
+      doctor_id,
+      appointment_date,
+      scheduled_start_at,
+      scheduled_end_at,
+      status,
+      schedule_source,
+      sequence_in_day,
+      priority,
+      manual_override,
+      notes,
+      created_at,
+      updated_at,
       patients(id, patient_code, full_name),
       treatment_courses(course_no),
       staff:doctor_id(full_name),
-      appointment_steps(*)
+      appointment_steps(id, appointment_id, service_id, resource_id, staff_id, step_sequence, planned_duration_minutes, planned_start_at, planned_end_at, status)
     `)
     .eq("appointment_date", dateStr)
     .neq("status", "CANCELLED")
-    .order("scheduled_start_at", { ascending: true });
+    .order("scheduled_start_at", { ascending: true })
+    .order("id", { ascending: true });
 
-  const apptList = (appointments as unknown as Array<Record<string, unknown>>) || [];
+  // Concurrently fetch active doctors and appointments in parallel
+  const [docRes, apptRes] = await Promise.all([
+    supabase
+      .from("staff")
+      .select("id, staff_code, full_name")
+      .eq("role_type", "DOCTOR")
+      .eq("is_active", true)
+      .order("full_name", { ascending: true }),
+    apptQuery,
+  ]);
+
+  const docList = (docRes.data as Array<{ id: string; staff_code: string; full_name: string }>) || [];
+  const apptList = (apptRes.data as unknown as Array<Record<string, unknown>>) || [];
 
   // 3. Generate 5-minute time slots
   const timeSlots = generateDailyTimeSlots({

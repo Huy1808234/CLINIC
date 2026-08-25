@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/supabase-clients/server";
 import type { User } from "@supabase/supabase-js";
 
@@ -23,9 +24,12 @@ export class AuthenticationRequiredError extends Error {
  * Uses the standard Supabase server client (scoped to caller's cookies) and
  * verifies the JWT against the Supabase Auth server using `getUser()`.
  *
+ * Wrapped with React `cache()` for request-scoped deduplication across
+ * Server Component render trees in a single HTTP request.
+ *
  * @returns The authenticated Supabase `User` or `null` if unauthenticated.
  */
-export async function getCurrentAuthUser(): Promise<User | null> {
+export const getCurrentAuthUser = cache(async (): Promise<User | null> => {
   try {
     const supabase = await createClient();
     const {
@@ -43,7 +47,7 @@ export async function getCurrentAuthUser(): Promise<User | null> {
     console.error("Failed to resolve authenticated auth user:", err);
     return null;
   }
-}
+});
 
 /**
  * Requires a valid authenticated Supabase user on the server.

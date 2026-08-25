@@ -7,9 +7,22 @@ export async function getClinicsList(): Promise<Clinic[]> {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("clinics")
-      .select("*")
+      .select(`
+        id,
+        organization_id,
+        clinic_code,
+        name,
+        short_name,
+        address,
+        phone,
+        timezone,
+        is_active,
+        created_at,
+        updated_at
+      `)
       .eq("is_active", true)
-      .order("name", { ascending: true });
+      .order("name", { ascending: true })
+      .order("id", { ascending: true });
 
     if (error) {
       console.error("Error fetching clinics:", error);
@@ -40,9 +53,17 @@ export async function getOrganizationsList(): Promise<Organization[]> {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("organizations")
-      .select("*")
+      .select(`
+        id,
+        code,
+        name,
+        is_active,
+        created_at,
+        updated_at
+      `)
       .eq("is_active", true)
-      .order("name", { ascending: true });
+      .order("name", { ascending: true })
+      .order("id", { ascending: true });
 
     if (error) {
       console.error("Error fetching organizations:", error);
@@ -60,49 +81,59 @@ export async function getStaffList(clinicIdFilter?: string): Promise<StaffWithCl
   try {
     const supabase = createAdminClient();
 
-    // 1. Fetch staff members
-    const { data: staffRows, error: staffError } = await supabase
-      .from("staff")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (staffError || !staffRows) {
-      console.error("Error fetching staff list:", staffError);
-      return [];
-    }
-
-    // 2. Fetch memberships with clinic details
-    const { data: membershipRows, error: memError } = await supabase
-      .from("staff_clinic_memberships")
-      .select(`
-        id,
-        staff_id,
-        clinic_id,
-        is_primary,
-        is_active,
-        clinics (
+    // Concurrently fetch staff, memberships, and roles in parallel
+    const [staffRes, membershipRes, roleRes] = await Promise.all([
+      supabase
+        .from("staff")
+        .select(`
           id,
-          name,
-          clinic_code
-        )
-      `);
+          user_id,
+          login_username,
+          auth_setup_required,
+          auth_setup_completed_at,
+          staff_code,
+          full_name,
+          phone,
+          email,
+          role_type,
+          is_active,
+          created_at
+        `)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false }),
 
-    if (memError) {
-      console.error("Error fetching memberships:", memError);
-    }
+      supabase
+        .from("staff_clinic_memberships")
+        .select(`
+          id,
+          staff_id,
+          clinic_id,
+          is_primary,
+          is_active,
+          clinics (
+            id,
+            name,
+            clinic_code
+          )
+        `),
 
-    // 3. Fetch roles
-    const { data: roleRows, error: roleError } = await supabase
-      .from("staff_clinic_roles")
-      .select("*");
+      supabase
+        .from("staff_clinic_roles")
+        .select("id, staff_clinic_membership_id, role_code"),
+    ]);
 
-    if (roleError) {
-      console.error("Error fetching roles:", roleError);
+    const staffRows = staffRes.data || [];
+    const membershipRows = membershipRes.data || [];
+    const roleRows = roleRes.data || [];
+
+    if (staffRes.error) {
+      console.error("Error fetching staff list:", staffRes.error);
+      return [];
     }
 
     // Map memberships with their roles
     const rolesByMembershipId: Record<string, ClinicRoleCode[]> = {};
-    for (const r of roleRows || []) {
+    for (const r of roleRows) {
       if (!rolesByMembershipId[r.staff_clinic_membership_id]) {
         rolesByMembershipId[r.staff_clinic_membership_id] = [];
       }
@@ -110,7 +141,7 @@ export async function getStaffList(clinicIdFilter?: string): Promise<StaffWithCl
     }
 
     const membershipsByStaffId: Record<string, StaffWithClinicMemberships["memberships"]> = {};
-    for (const m of membershipRows || []) {
+    for (const m of membershipRows) {
       if (!membershipsByStaffId[m.staff_id]) {
         membershipsByStaffId[m.staff_id] = [];
       }

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/supabase-clients/server";
 import { getActiveClinicContext } from "@/lib/auth/clinic-context";
 import type { DiagnosisCatalogItem, ServiceCatalogItem } from "@/types/catalog";
@@ -10,11 +11,16 @@ export interface DoctorStaffItem {
   role_type: string;
 }
 
-export async function getCatalogs(clinicId?: string): Promise<{
+/**
+ * Loads diagnosis catalog, service catalog, and clinic doctors.
+ * Wrapped with React `cache()` for request-scoped deduplication across
+ * Server Component render trees in a single HTTP request.
+ */
+export const getCatalogs = cache(async (clinicId?: string): Promise<{
   diagnoses: DiagnosisCatalogItem[];
   services: ServiceCatalogItem[];
   doctors: DoctorStaffItem[];
-}> {
+}> => {
   const supabase = await createClient();
 
   let targetClinicId = clinicId;
@@ -30,14 +36,16 @@ export async function getCatalogs(clinicId?: string): Promise<{
   const [diagRes, servRes] = await Promise.all([
     supabase
       .from("diagnosis_catalog")
-      .select("*")
+      .select("id, code_system, code, name, traditional_code, traditional_name, description, is_active, metadata")
       .eq("is_active", true)
-      .order("code", { ascending: true }),
+      .order("code", { ascending: true })
+      .order("id", { ascending: true }),
     supabase
       .from("service_catalog")
-      .select("*")
+      .select("id, service_code, service_name, service_group, default_duration_minutes, setup_minutes, cleanup_minutes, required_resource_type, is_active")
       .eq("is_active", true)
-      .order("service_code", { ascending: true }),
+      .order("service_code", { ascending: true })
+      .order("id", { ascending: true }),
   ]);
 
   let doctors: DoctorStaffItem[] = [];
@@ -92,4 +100,4 @@ export async function getCatalogs(clinicId?: string): Promise<{
     services: (servRes.data as unknown as ServiceCatalogItem[]) || [],
     doctors,
   };
-}
+});

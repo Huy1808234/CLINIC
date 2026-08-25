@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/supabase-clients/server";
 import type { ClinicRoleCode } from "@/types/clinic";
 import {
@@ -59,10 +60,13 @@ export interface StaffClinicRoleContext {
  * - Only queries `staff_clinic_roles` for that specific membership.
  * - Does NOT use `createAdminClient()`.
  *
+ * Wrapped with React `cache()` for request-scoped deduplication across
+ * Server Component render trees in a single HTTP request.
+ *
  * @param clinicId Target clinic UUID.
  * @returns Array of `ClinicRoleCode` or empty array if unauthorized/no roles.
  */
-export async function getCurrentStaffRolesForClinic(clinicId: string): Promise<ClinicRoleCode[]> {
+export const getCurrentStaffRolesForClinic = cache(async (clinicId: string): Promise<ClinicRoleCode[]> => {
   if (!clinicId) {
     return [];
   }
@@ -91,7 +95,7 @@ export async function getCurrentStaffRolesForClinic(clinicId: string): Promise<C
     console.error("Failed to resolve staff clinic roles:", err);
     return [];
   }
-}
+});
 
 /**
  * Requires the current staff member to hold an active membership with at least one role at the target clinic.
@@ -103,11 +107,13 @@ export async function getCurrentStaffRolesForClinic(clinicId: string): Promise<C
  * 4. Active Membership at Target Clinic (throws `StaffClinicAccessDeniedError`, 403)
  * 5. At least one assigned Role at Target Clinic (throws `StaffNoClinicRolesError`, 403)
  *
+ * Wrapped with React `cache()` for request-scoped deduplication.
+ *
  * @param clinicId Target clinic UUID.
  * @returns Verified `StaffClinicRoleContext` containing membership metadata and assigned roles.
  * @throws `AuthenticationRequiredError` | `StaffNotLinkedError` | `StaffInactiveError` | `StaffClinicAccessDeniedError` | `StaffNoClinicRolesError`
  */
-export async function requireCurrentStaffRolesForClinic(clinicId: string): Promise<StaffClinicRoleContext> {
+export const requireCurrentStaffRolesForClinic = cache(async (clinicId: string): Promise<StaffClinicRoleContext> => {
   if (!clinicId) {
     throw new StaffClinicAccessDeniedError("Mã cơ sở phòng khám không hợp lệ.");
   }
@@ -147,7 +153,7 @@ export async function requireCurrentStaffRolesForClinic(clinicId: string): Promi
     is_primary: targetMembership.is_primary,
     roles,
   };
-}
+});
 
 /**
  * Pure helper to verify if a role list includes a specific role code.

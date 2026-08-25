@@ -7,7 +7,26 @@ export async function getPatientProfile(patientId: string): Promise<PatientProfi
 
   const { data: patient, error } = await supabase
     .from("patients")
-    .select("*")
+    .select(`
+      id,
+      patient_code,
+      full_name,
+      normalized_name,
+      phone,
+      citizen_id,
+      citizen_id_issued_at,
+      citizen_id_issued_by,
+      birth_date,
+      birth_year,
+      dob_precision,
+      sex,
+      address,
+      occupation,
+      notes,
+      is_active,
+      created_at,
+      updated_at
+    `)
     .eq("id", patientId)
     .maybeSingle();
 
@@ -15,45 +34,76 @@ export async function getPatientProfile(patientId: string): Promise<PatientProfi
     return null;
   }
 
-  // Fetch current insurance card
-  const { data: insurance } = await supabase
-    .from("patient_insurance_cards")
-    .select("*")
-    .eq("patient_id", patientId)
-    .eq("is_current", true)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Concurrently fetch sub-attributes
+  const [insuranceRes, measurementRes, alertRes, activeCourseRes] = await Promise.all([
+    supabase
+      .from("patient_insurance_cards")
+      .select(`
+        id,
+        patient_id,
+        card_number,
+        issue_date,
+        expiration_date,
+        initial_healthcare_code,
+        initial_healthcare_name,
+        is_current,
+        notes,
+        created_at
+      `)
+      .eq("patient_id", patientId)
+      .eq("is_current", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
 
-  // Fetch latest measurement
-  const { data: measurement } = await supabase
-    .from("patient_measurements")
-    .select("*")
-    .eq("patient_id", patientId)
-    .order("measured_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    supabase
+      .from("patient_measurements")
+      .select(`
+        id,
+        patient_id,
+        blood_pressure_systolic,
+        blood_pressure_diastolic,
+        heart_rate,
+        temperature,
+        height,
+        weight,
+        bmi,
+        notes,
+        measured_at,
+        created_at
+      `)
+      .eq("patient_id", patientId)
+      .order("measured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
 
-  // Fetch active alerts
-  const { data: alerts } = await supabase
-    .from("patient_alerts")
-    .select("*")
-    .eq("patient_id", patientId)
-    .eq("is_active", true)
-    .order("created_at", { ascending: false });
+    supabase
+      .from("patient_alerts")
+      .select(`
+        id,
+        patient_id,
+        alert_type,
+        alert_level,
+        message,
+        is_active,
+        created_at
+      `)
+      .eq("patient_id", patientId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
 
-  // Fetch active courses count
-  const { count: activeCourseCount } = await supabase
-    .from("treatment_courses")
-    .select("*", { count: "exact", head: true })
-    .eq("patient_id", patientId)
-    .eq("status", "ACTIVE");
+    supabase
+      .from("treatment_courses")
+      .select("id", { count: "exact", head: true })
+      .eq("patient_id", patientId)
+      .eq("status", "ACTIVE"),
+  ]);
 
   return {
     ...(patient as unknown as Patient),
-    current_insurance: (insurance as unknown as PatientInsuranceCard) || null,
-    latest_measurement: (measurement as unknown as PatientMeasurement) || null,
-    active_alerts: (alerts as unknown as PatientAlert[]) || [],
-    active_treatment_courses_count: activeCourseCount || 0,
+    current_insurance: (insuranceRes.data as unknown as PatientInsuranceCard) || null,
+    latest_measurement: (measurementRes.data as unknown as PatientMeasurement) || null,
+    active_alerts: (alertRes.data as unknown as PatientAlert[]) || [],
+    active_treatment_courses_count: activeCourseRes.count || 0,
   };
 }

@@ -143,7 +143,7 @@ export async function getDiagnosisCatalogPage(
     supabase
       .from("diagnosis_catalog")
       .select("code_system")
-      .order("code_system", { ascending: true }),
+      .limit(100),
   ]);
 
   if (listRes.error) {
@@ -153,13 +153,14 @@ export async function getDiagnosisCatalogPage(
   const items = (listRes.data as unknown as DiagnosisCatalogItem[]) || [];
   const total = listRes.count ?? 0;
   const activeCount = activeRes.count ?? 0;
-  const codeSystems = Array.from(
-    new Set(
-      ((codeSystemRes.data as Array<{ code_system: string }> | null) || [])
-        .map((item) => item.code_system)
-        .filter((codeSystem) => codeSystem.trim().length > 0)
-    )
+  const fetchedCodeSystems = (
+    ((codeSystemRes.data as Array<{ code_system: string }> | null) || [])
+      .map((item) => item.code_system)
+      .filter((codeSystem) => codeSystem.trim().length > 0)
   );
+  const codeSystems = Array.from(
+    new Set(["YHCT", "ICD10", ...fetchedCodeSystems])
+  ).sort();
   const totalPages = Math.ceil(total / pageSize) || 1;
 
   return {
