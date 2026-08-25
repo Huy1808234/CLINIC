@@ -1,9 +1,11 @@
 import React from "react";
 import { AppShell } from "@/components/layout/AppShell";
+import { requireApplicationPageAccessContext } from "@/lib/auth/application-access";
 import { getImportBatches } from "@/rsc-data/migration/get-batches";
 import { MigrationClientView } from "@/components/migration/MigrationClientView";
 
 export default async function MigrationPage() {
+  await requireApplicationPageAccessContext();
   const batches = await getImportBatches();
 
   return (

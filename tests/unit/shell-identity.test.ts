@@ -153,9 +153,11 @@ export function runShellIdentityTests() {
   assert.equal(isRouteVisibleForRoles("/reception", []), false, "NAV-AUTH-12: Empty roles cannot see /reception");
   assert.equal(isRouteVisibleForRoles("/schedule", []), false, "NAV-AUTH-12: Empty roles cannot see /schedule");
   assert.equal(isRouteVisibleForRoles("/patients", []), false, "NAV-AUTH-12: Empty roles cannot see /patients");
+  assert.equal(isRouteVisibleForRoles("/master-data/diagnoses", []), false, "Empty roles cannot see /master-data/diagnoses");
+  assert.equal(isRouteVisibleForRoles("/master-data/diagnoses", ["ADMIN"]), true, "ADMIN can see /master-data/diagnoses");
 
   // Verify all centralized routes exist in NAVIGATION_ROUTE_ACCESS
-  assert.equal(NAVIGATION_ROUTE_ACCESS.length, 5, "Centralized navigation defines 5 standard routes");
+  assert.equal(NAVIGATION_ROUTE_ACCESS.length, 6, "Centralized navigation defines 6 standard routes");
 
   console.log("All AppShell Dynamic Identity & Navigation Auth Unit Tests PASSED!");
 }

@@ -49,8 +49,9 @@ export const LoginForm: React.FC = () => {
         return;
       }
 
-      // Successful authentication -> navigate directly to clinic selection
-      router.push("/select-clinic");
+      // Successful authentication -> navigate to auto-entered workspace or clinic selection
+      const destination = res.redirectUrl || "/select-clinic";
+      router.push(destination);
       router.refresh();
     } catch {
       setErrorMessage("Hệ thống đăng nhập đang tạm thời không khả dụng. Vui lòng thử lại sau.");

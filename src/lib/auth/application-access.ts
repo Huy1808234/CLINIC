@@ -1,6 +1,19 @@
 import "server-only";
-import { getCurrentStaff, requireCurrentStaff } from "./staff-resolver";
-import { getActiveClinicContext, requireActiveClinic } from "./clinic-context";
+import { redirect } from "next/navigation";
+import { AuthenticationRequiredError } from "./auth-resolver";
+import {
+  getCurrentStaff,
+  requireCurrentStaff,
+  AccountSetupRequiredError,
+} from "./staff-resolver";
+import {
+  getActiveClinicContext,
+  requireActiveClinic,
+  NoActiveClinicSelectedError,
+} from "./clinic-context";
+import { StaffClinicAccessDeniedError } from "./role-resolver";
+import { StaffNoActiveClinicError } from "./clinic-resolver";
+import { PasswordRecoveryRequiredError } from "./recovery-context";
 
 /**
  * Verified Application Access Context representing an active authenticated Staff
@@ -92,3 +105,59 @@ export async function requireApplicationAccessContext(): Promise<ApplicationAcce
     },
   };
 }
+
+function isNextRedirectError(error: unknown): boolean {
+  if (typeof error === "object" && error !== null && "digest" in error) {
+    const digest = String((error as { digest?: unknown }).digest || "");
+    return digest.startsWith("NEXT_REDIRECT");
+  }
+  return false;
+}
+
+/**
+ * Enforces and returns the verified Application Access Context for a Server Component Page.
+ *
+ * Catches unauthenticated/session-navigation conditions and initiates clean redirects:
+ * - `AuthenticationRequiredError` -> `redirect("/login")`
+ * - `NoActiveClinicSelectedError` / `StaffClinicAccessDeniedError` / `StaffNoActiveClinicError` -> `redirect("/select-clinic")`
+ * - `AccountSetupRequiredError` -> `redirect("/auth/setup-password")`
+ * - `PasswordRecoveryRequiredError` -> `redirect("/auth/reset-password")`
+ *
+ * Unexpected infrastructure or database errors are re-thrown so they are not masked as login redirects.
+ *
+ * @returns Verified `ApplicationAccessContext`.
+ */
+export async function requireApplicationPageAccessContext(): Promise<ApplicationAccessContext> {
+  try {
+    return await requireApplicationAccessContext();
+  } catch (error: unknown) {
+    // Preserve Next.js redirect control-flow error without swallowing or modifying it
+    if (isNextRedirectError(error)) {
+      throw error;
+    }
+
+    if (error instanceof AuthenticationRequiredError) {
+      redirect("/login");
+    }
+
+    if (
+      error instanceof NoActiveClinicSelectedError ||
+      error instanceof StaffClinicAccessDeniedError ||
+      error instanceof StaffNoActiveClinicError
+    ) {
+      redirect("/select-clinic");
+    }
+
+    if (error instanceof AccountSetupRequiredError) {
+      redirect("/auth/setup-password");
+    }
+
+    if (error instanceof PasswordRecoveryRequiredError) {
+      redirect("/auth/reset-password");
+    }
+
+    // Re-throw any other error (StaffNotLinkedError, StaffInactiveError, DB errors, etc.)
+    throw error;
+  }
+}
+

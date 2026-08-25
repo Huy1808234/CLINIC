@@ -76,6 +76,14 @@ export async function setActiveClinicCookie(clinicId: string): Promise<ActiveCli
     maxAge: 60 * 60 * 24 * 30, // 30 days
   });
 
+  // Persist user's latest workspace preference in database
+  try {
+    const { saveStaffClinicPreference } = await import("./staff-preferences");
+    await saveStaffClinicPreference(matched.staff_id, matched.clinic_id);
+  } catch (err: unknown) {
+    console.error("Secondary error saving clinic preference:", err);
+  }
+
   return {
     id: matched.clinic_id,
     clinic_code: matched.clinic_code,

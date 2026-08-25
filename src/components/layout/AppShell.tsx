@@ -39,6 +39,13 @@ export async function AppShell({ title, subtitle, actions, children }: AppShellP
     accessContext = await requireApplicationAccessContext();
     activeRoles = await getCurrentStaffRolesForClinic(accessContext.clinic.clinic_id);
   } catch (error: unknown) {
+    if (typeof error === "object" && error !== null && "digest" in error) {
+      const digest = String((error as { digest?: unknown }).digest || "");
+      if (digest.startsWith("NEXT_REDIRECT")) {
+        throw error;
+      }
+    }
+
     if (
       error instanceof NoActiveClinicSelectedError ||
       error instanceof StaffClinicAccessDeniedError ||

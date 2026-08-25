@@ -28,9 +28,9 @@ export function runLoginAntdRedesignTests() {
 
   // LOGIN-UI-3: Redirects on successful login
   assert.equal(
-    formCode.includes('router.push("/select-clinic")'),
+    formCode.includes('router.push(destination)') && formCode.includes('"/select-clinic"'),
     true,
-    "LoginForm redirects to /select-clinic upon successful authentication (LOGIN-UI-3)"
+    "LoginForm redirects to auto-enter workspace or /select-clinic upon successful authentication (LOGIN-UI-3)"
   );
 
   // LOGIN-UI-4 & LOGIN-UI-5: Generic error presentation (LOGIN-FIX-14)

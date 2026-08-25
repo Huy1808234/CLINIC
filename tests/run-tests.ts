@@ -37,6 +37,19 @@ import { runAtomicReceptionIntakeRpcTests } from "./unit/atomic-reception-intake
 import { runReceptionTimezoneTests } from "./unit/reception-timezone.test";
 import { runScheduleTimezoneTests } from "./unit/schedule-timezone.test";
 import { runLoginAntdRedesignTests } from "./unit/login-antd-redesign.test";
+import { runSelectClinicRedesignTests } from "./unit/select-clinic-redesign.test";
+import { runClinicSelectionUxTests } from "./unit/clinic-selection-ux.test";
+import { runDashboardAntdRedesignTests } from "./unit/dashboard-antd-redesign.test";
+import { runAuthClinicAutoEnterFixTests } from "./unit/auth-clinic-autoenter-fix.test";
+import { runDoctorClinicalCourseUiTests } from "./unit/doctor-clinical-course-ui.test";
+import { runDiagnosisCatalogTt06ImportTests } from "./unit/diagnosis-catalog-tt06-import.test";
+import { runDiagnosisDvktTemplateStageBTests } from "./unit/diagnosis-dvkt-template-stageb.test";
+import { runTt06TemplateRlsTests } from "./unit/tt06-template-rls.test";
+import { runDoctorTt06SuggestionUiTests } from "./unit/doctor-tt06-suggestion-ui.test";
+import { runDoctorPatientChartWorkspaceTests } from "./unit/doctor-patient-chart-workspace.test";
+import { runClinicalMasterDiagnosisManagementTests } from "./unit/clinical-master-diagnosis-management.test";
+import { runAuthProtectedPageLogoutStabilityTests } from "./unit/auth-protected-page-logout-stability.test";
+import { runClinicalMasterDiagnosisProductionHardeningTests } from "./unit/clinical-master-diagnosis-production-hardening.test";
 
 async function main() {
   try {
@@ -79,6 +92,19 @@ async function main() {
     await runReceptionTimezoneTests();
     await runScheduleTimezoneTests();
     runLoginAntdRedesignTests();
+    runSelectClinicRedesignTests();
+    runClinicSelectionUxTests();
+    runDashboardAntdRedesignTests();
+    runAuthClinicAutoEnterFixTests();
+    runDoctorClinicalCourseUiTests();
+    await runDiagnosisCatalogTt06ImportTests();
+    await runDiagnosisDvktTemplateStageBTests();
+    await runTt06TemplateRlsTests();
+    await runDoctorTt06SuggestionUiTests();
+    runDoctorPatientChartWorkspaceTests();
+    await runClinicalMasterDiagnosisManagementTests();
+    await runAuthProtectedPageLogoutStabilityTests();
+    await runClinicalMasterDiagnosisProductionHardeningTests();
     console.log("All unit test suites executed successfully.");
   } catch (err) {
     console.error("Test failure:", err);

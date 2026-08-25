@@ -69,6 +69,33 @@ export interface PatientProfile extends Patient {
   active_treatment_courses_count: number;
 }
 
+export interface CourseDiagnosisSummaryItem {
+  id: string;
+  diagnosis_id: string | null;
+  raw_code: string | null;
+  raw_text: string | null;
+  diagnosis_type: string;
+  is_primary: boolean;
+}
+
+export interface CourseServiceOrderSummaryItem {
+  id: string;
+  service_id: string;
+  service_code: string;
+  service_name: string;
+  sequence_no: number;
+}
+
+export interface PatientReceptionSummaryItem {
+  id: string;
+  arrived_at: string;
+  registered_at: string;
+  reception_source: string;
+  reason_for_visit: string | null;
+  notes: string | null;
+  created_by_name?: string | null;
+}
+
 export interface PatientHistorySummary {
   patient: Patient;
   insurance_cards: PatientInsuranceCard[];
@@ -88,6 +115,8 @@ export interface PatientHistorySummary {
     doctor_name: string | null;
     diagnoses: string[];
     services: string[];
+    course_diagnoses?: CourseDiagnosisSummaryItem[];
+    course_services?: CourseServiceOrderSummaryItem[];
   }[];
   recent_appointments: {
     id: string;
@@ -97,6 +126,7 @@ export interface PatientHistorySummary {
     status: AppointmentStatus;
     doctor_name: string | null;
   }[];
+  recent_receptions?: PatientReceptionSummaryItem[];
 }
 
 export type DeduplicationMatchPriority =

@@ -525,6 +525,144 @@ export interface Database {
         };
         Relationships: [];
       };
+      clinical_diagnosis_templates: {
+        Row: {
+          id: string;
+          organization_id: string;
+          diagnosis_id: string;
+          source_regulation: string;
+          source_version: string | null;
+          effective_from: string;
+          effective_to: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          diagnosis_id: string;
+          source_regulation?: string;
+          source_version?: string | null;
+          effective_from: string;
+          effective_to?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          diagnosis_id?: string;
+          source_regulation?: string;
+          source_version?: string | null;
+          effective_from?: string;
+          effective_to?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinical_diagnosis_templates_diagnosis_id_fkey";
+            columns: ["diagnosis_id"];
+            isOneToOne: false;
+            referencedRelation: "diagnosis_catalog";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinical_diagnosis_templates_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      clinical_diagnosis_template_items: {
+        Row: {
+          id: string;
+          template_id: string;
+          service_id: string;
+          sequence_no: number;
+          indication_notes: string | null;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          template_id: string;
+          service_id: string;
+          sequence_no: number;
+          indication_notes?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          template_id?: string;
+          service_id?: string;
+          sequence_no?: number;
+          indication_notes?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinical_diagnosis_template_items_service_id_fkey";
+            columns: ["service_id"];
+            isOneToOne: false;
+            referencedRelation: "service_catalog";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinical_diagnosis_template_items_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "clinical_diagnosis_templates";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      clinical_template_cycle_codings: {
+        Row: {
+          id: string;
+          template_item_id: string;
+          cycle_number: number;
+          diagnosis_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          template_item_id: string;
+          cycle_number: number;
+          diagnosis_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          template_item_id?: string;
+          cycle_number?: number;
+          diagnosis_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinical_template_cycle_codings_diagnosis_id_fkey";
+            columns: ["diagnosis_id"];
+            isOneToOne: false;
+            referencedRelation: "diagnosis_catalog";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinical_template_cycle_codings_template_item_id_fkey";
+            columns: ["template_item_id"];
+            isOneToOne: false;
+            referencedRelation: "clinical_diagnosis_template_items";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       resources: {
         Row: {
           id: string;
@@ -1230,6 +1368,42 @@ export interface Database {
             columns: ["staff_clinic_membership_id"];
             isOneToOne: false;
             referencedRelation: "staff_clinic_memberships";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      staff_preferences: {
+        Row: {
+          staff_id: string;
+          last_selected_clinic_id: string | null;
+          last_selected_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          staff_id: string;
+          last_selected_clinic_id?: string | null;
+          last_selected_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          staff_id?: string;
+          last_selected_clinic_id?: string | null;
+          last_selected_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "staff_preferences_staff_id_fkey";
+            columns: ["staff_id"];
+            isOneToOne: true;
+            referencedRelation: "staff";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "staff_preferences_last_selected_clinic_id_fkey";
+            columns: ["last_selected_clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
             referencedColumns: ["id"];
           }
         ];

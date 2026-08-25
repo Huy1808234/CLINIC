@@ -41,8 +41,8 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
       *,
       staff:primary_doctor_id(full_name),
       planned_by_doctor:planned_by_doctor_id(full_name),
-      course_diagnoses(raw_code, raw_text),
-      course_service_orders(service_catalog(service_name))
+      course_diagnoses(id, diagnosis_id, raw_code, raw_text, diagnosis_type, is_primary),
+      course_service_orders(id, service_id, sequence_no, is_active, service_catalog(id, service_code, service_name))
     `)
     .eq("patient_id", patientId)
     .order("course_no", { ascending: false });
@@ -58,13 +58,60 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     .order("appointment_date", { ascending: false })
     .limit(20);
 
+  // 6. Recent receptions (Current visit context)
+  const { data: receptions } = await supabase
+    .from("receptions")
+    .select(`
+      *,
+      staff:created_by(full_name)
+    `)
+    .eq("patient_id", patientId)
+    .order("registered_at", { ascending: false })
+    .limit(5);
+
   const formattedCourses = ((courses as unknown as Array<Record<string, unknown>>) || []).map((c) => {
     const doctorName = (c.staff as { full_name?: string } | null)?.full_name || null;
     const plannedByDoctorName = (c.planned_by_doctor as { full_name?: string } | null)?.full_name || null;
-    const diagnoses = ((c.course_diagnoses as Array<{ raw_code?: string; raw_text?: string }>) || [])
-      .map((d) => d.raw_code || d.raw_text || "")
+
+    const rawCourseDiagnoses = ((c.course_diagnoses as Array<{
+      id: string;
+      diagnosis_id: string | null;
+      raw_code: string | null;
+      raw_text: string | null;
+      diagnosis_type: string;
+      is_primary: boolean;
+    }>) || []);
+
+    const courseDiagnoses = rawCourseDiagnoses.map((d) => ({
+      id: d.id,
+      diagnosis_id: d.diagnosis_id,
+      raw_code: d.raw_code,
+      raw_text: d.raw_text,
+      diagnosis_type: d.diagnosis_type || (d.is_primary ? "PRIMARY" : "SECONDARY"),
+      is_primary: d.is_primary ?? (d.diagnosis_type === "PRIMARY"),
+    }));
+
+    const diagnoses = rawCourseDiagnoses
+      .map((d) => (d.raw_code && d.raw_text ? `${d.raw_code} - ${d.raw_text}` : d.raw_code || d.raw_text || ""))
       .filter(Boolean);
-    const services = ((c.course_service_orders as Array<{ service_catalog?: { service_name?: string } }>) || [])
+
+    const rawServiceOrders = ((c.course_service_orders as Array<{
+      id: string;
+      service_id: string;
+      sequence_no: number;
+      is_active: boolean;
+      service_catalog?: { id: string; service_code?: string; service_name?: string };
+    }>) || []).filter((s) => s.is_active !== false);
+
+    const courseServices = rawServiceOrders.map((s) => ({
+      id: s.id,
+      service_id: s.service_id,
+      service_code: s.service_catalog?.service_code || "",
+      service_name: s.service_catalog?.service_name || "",
+      sequence_no: s.sequence_no,
+    }));
+
+    const services = rawServiceOrders
       .map((s) => s.service_catalog?.service_name || "")
       .filter(Boolean);
 
@@ -82,6 +129,8 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
       doctor_name: doctorName,
       diagnoses,
       services,
+      course_diagnoses: courseDiagnoses,
+      course_services: courseServices,
     };
   });
 
@@ -97,6 +146,19 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     };
   });
 
+  const formattedReceptions = ((receptions as unknown as Array<Record<string, unknown>>) || []).map((r) => {
+    const createdByName = (r.staff as { full_name?: string } | null)?.full_name || null;
+    return {
+      id: r.id as string,
+      arrived_at: r.arrived_at as string,
+      registered_at: r.registered_at as string,
+      reception_source: r.reception_source as string,
+      reason_for_visit: (r.reason_for_visit as string | null) || null,
+      notes: (r.notes as string | null) || null,
+      created_by_name: createdByName,
+    };
+  });
+
   return {
     patient: patient as unknown as Patient,
     insurance_cards: (insuranceCards as unknown as PatientInsuranceCard[]) || [],
@@ -104,5 +166,6 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     alerts: (alerts as unknown as PatientAlert[]) || [],
     treatment_courses: formattedCourses,
     recent_appointments: formattedAppointments,
+    recent_receptions: formattedReceptions,
   };
 }

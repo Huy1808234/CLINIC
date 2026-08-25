@@ -11,6 +11,7 @@ import {
   FileTextOutlined,
   TeamOutlined,
   CloudUploadOutlined,
+  MedicineBoxOutlined,
   DownOutlined,
   SwapOutlined,
   LogoutOutlined,
@@ -85,6 +86,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <TeamOutlined style={{ fontSize: 16 }} />,
     },
     {
+      key: "/master-data/diagnoses",
+      label: "Danh Mục Mã Bệnh",
+      href: "/master-data/diagnoses",
+      icon: <MedicineBoxOutlined style={{ fontSize: 16 }} />,
+    },
+    {
       key: "/migration",
       label: "Nhập Dữ Liệu Excel",
       href: "/migration",
@@ -104,7 +111,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   );
 
   const handleLogout = async () => {
-    await signOutAction();
+    onClose?.();
+    const res = await signOutAction();
+    if (res?.success) {
+      router.replace("/login");
+      router.refresh();
+    }
   };
 
   const staffDropdownItems: MenuProps["items"] = [

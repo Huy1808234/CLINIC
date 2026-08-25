@@ -57,6 +57,11 @@ export const NAVIGATION_ROUTE_ACCESS: NavigationRouteAccess[] = [
     allowedRoles: ["ADMIN"],
   },
   {
+    label: "Danh Mục Mã Bệnh",
+    href: "/master-data/diagnoses",
+    allowedRoles: ["ADMIN", "MANAGER", "DOCTOR"],
+  },
+  {
     label: "Nhập Dữ Liệu Excel",
     href: "/migration",
     allowedRoles: ["ADMIN"],

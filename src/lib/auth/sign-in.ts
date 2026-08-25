@@ -6,6 +6,9 @@ import {
   USERNAME_REGEX,
   type SignInInput,
 } from "@/lib/validation/auth-schemas";
+import type { StaffClinicMembershipIdentity } from "./clinic-resolver";
+import { getStaffClinicPreference, evaluateAutoEnterDecision } from "./staff-preferences";
+import { setActiveClinicCookie } from "./clinic-context";
 
 export type SignInResult =
   | {
@@ -13,6 +16,7 @@ export type SignInResult =
       user: {
         id: string;
       };
+      redirectUrl?: string;
     }
   | {
       success: false;
@@ -33,9 +37,12 @@ const SERVICE_ERROR_MESSAGE = "Hệ thống xác thực tạm thời không kh�
  * 4. Resolves the linked Supabase Auth User's ACTUAL Auth email via `auth.admin.getUserById(staff.user_id)`.
  *    (Does NOT use `staff.email` as the final login Auth identity).
  * 5. Uses normal session-capable server Supabase client (`signInWithPassword`) to establish session cookies.
- * 6. Returns generic error message for all credential mismatches to prevent account enumeration.
- * 7. Browser receives ONLY minimal success signal or generic error; never exposed to resolved Auth email,
- *    tokens, or passwords.
+ * 6. Evaluates active clinic auto-enter decision inside this Server Action mutation boundary:
+ *    - 0 clinics -> redirects to /select-clinic (shows zero-clinic state)
+ *    - 1 clinic -> sets active clinic cookie & persists preference -> redirects to /
+ *    - >1 clinics + valid remembered clinic -> sets active clinic cookie & refreshes preference -> redirects to /
+ *    - >1 clinics + invalid/no preference -> redirects to /select-clinic
+ * 7. Returns generic error message for all credential mismatches to prevent account enumeration.
  *
  * @param input Username and password object.
  * @returns Typed `SignInResult`.
@@ -134,11 +141,76 @@ export async function signInWithUsernamePassword(input: SignInInput): Promise<Si
       };
     }
 
+    // 4. Auto-enter evaluation inside the Server Action mutation boundary
+    let redirectUrl = "/select-clinic";
+    try {
+      const { data: memberRows } = await adminSupabase
+        .from("staff_clinic_memberships")
+        .select(`
+          id,
+          staff_id,
+          clinic_id,
+          is_primary,
+          is_active,
+          clinics (
+            id,
+            organization_id,
+            clinic_code,
+            name,
+            timezone,
+            is_active
+          )
+        `)
+        .eq("staff_id", staff.id)
+        .eq("is_active", true);
+
+      const authorizedMemberships: StaffClinicMembershipIdentity[] = [];
+      if (memberRows) {
+        for (const row of memberRows) {
+          const clinic = row.clinics as unknown as {
+            id: string;
+            organization_id: string;
+            clinic_code: string;
+            name: string;
+            timezone?: string | null;
+            is_active: boolean;
+          } | null;
+
+          if (clinic && clinic.is_active) {
+            authorizedMemberships.push({
+              membership_id: row.id,
+              staff_id: row.staff_id,
+              clinic_id: clinic.id,
+              clinic_code: clinic.clinic_code,
+              clinic_name: clinic.name,
+              organization_id: clinic.organization_id,
+              is_primary: row.is_primary ?? false,
+              timezone: clinic.timezone || "Asia/Ho_Chi_Minh",
+            });
+          }
+        }
+      }
+
+      const pref = await getStaffClinicPreference(staff.id);
+      const { shouldAutoEnter, targetClinicId } = evaluateAutoEnterDecision(
+        authorizedMemberships,
+        pref?.last_selected_clinic_id || null
+      );
+
+      if (shouldAutoEnter && targetClinicId) {
+        await setActiveClinicCookie(targetClinicId);
+        redirectUrl = "/";
+      }
+    } catch (autoErr: unknown) {
+      console.error("Secondary error evaluating auto-enter during sign-in:", autoErr);
+    }
+
     return {
       success: true,
       user: {
         id: data.user.id,
       },
+      redirectUrl,
     };
   } catch (err: unknown) {
     console.error("Unexpected error during signInWithUsernamePassword:", err);

@@ -4,18 +4,13 @@ import { getReceptionStats } from "@/rsc-data/reception/get-reception-stats";
 import { getTodayReceptions } from "@/rsc-data/reception/get-receptions";
 import { getCatalogs } from "@/rsc-data/treatment/get-catalogs";
 import { ReceptionClientView } from "@/components/reception/ReceptionClientView";
-import { requireApplicationAccessContext } from "@/lib/auth/application-access";
+import { requireApplicationPageAccessContext } from "@/lib/auth/application-access";
 import { getCurrentStaffRolesForClinic } from "@/lib/auth/role-resolver";
 
 export default async function ReceptionPage() {
-  let isDoctor = false;
-  try {
-    const accessContext = await requireApplicationAccessContext();
-    const activeRoles = await getCurrentStaffRolesForClinic(accessContext.clinic.clinic_id);
-    isDoctor = activeRoles.includes("DOCTOR");
-  } catch {
-    // AppShell will handle redirection/access error boundary
-  }
+  const accessContext = await requireApplicationPageAccessContext();
+  const activeRoles = await getCurrentStaffRolesForClinic(accessContext.clinic.clinic_id);
+  const isDoctor = activeRoles.includes("DOCTOR");
 
   const [stats, queue, catalogs] = await Promise.all([
     getReceptionStats(),
