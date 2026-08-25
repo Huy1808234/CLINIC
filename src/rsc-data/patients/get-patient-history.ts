@@ -1,6 +1,13 @@
 import "server-only";
 import { createClient } from "@/supabase-clients/server";
-import type { PatientHistorySummary, Patient, PatientInsuranceCard, PatientMeasurement, PatientAlert } from "@/types/patient";
+import type {
+  PatientHistorySummary,
+  Patient,
+  PatientInsuranceCard,
+  PatientMeasurement,
+  PatientAlert,
+  ClinicalNoteItem,
+} from "@/types/patient";
 
 export async function getPatientHistory(patientId: string): Promise<PatientHistorySummary | null> {
   const supabase = await createClient();
@@ -68,6 +75,26 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     .eq("patient_id", patientId)
     .order("registered_at", { ascending: false })
     .limit(5);
+
+  // 7. Clinical notes history (Doctor observations, newest first)
+  const { data: clinicalNotes } = await supabase
+    .from("clinical_notes")
+    .select(`
+      id,
+      patient_id,
+      clinic_id,
+      organization_id,
+      treatment_course_id,
+      reception_id,
+      author_staff_id,
+      content,
+      created_at,
+      updated_at,
+      staff:author_staff_id(full_name),
+      treatment_courses:treatment_course_id(course_no)
+    `)
+    .eq("patient_id", patientId)
+    .order("created_at", { ascending: false });
 
   const formattedCourses = ((courses as unknown as Array<Record<string, unknown>>) || []).map((c) => {
     const doctorName = (c.staff as { full_name?: string } | null)?.full_name || null;
@@ -159,6 +186,25 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     };
   });
 
+  const formattedClinicalNotes: ClinicalNoteItem[] = ((clinicalNotes as unknown as Array<Record<string, unknown>>) || []).map((n) => {
+    const authorName = (n.staff as { full_name?: string } | null)?.full_name || "Bác sĩ";
+    const courseNo = (n.treatment_courses as { course_no?: number } | null)?.course_no || null;
+    return {
+      id: n.id as string,
+      patient_id: n.patient_id as string,
+      clinic_id: n.clinic_id as string,
+      organization_id: n.organization_id as string,
+      treatment_course_id: (n.treatment_course_id as string | null) || null,
+      reception_id: (n.reception_id as string | null) || null,
+      author_staff_id: n.author_staff_id as string,
+      author_name: authorName,
+      content: n.content as string,
+      created_at: n.created_at as string,
+      updated_at: n.updated_at as string,
+      course_no: courseNo,
+    };
+  });
+
   return {
     patient: patient as unknown as Patient,
     insurance_cards: (insuranceCards as unknown as PatientInsuranceCard[]) || [],
@@ -167,5 +213,6 @@ export async function getPatientHistory(patientId: string): Promise<PatientHisto
     treatment_courses: formattedCourses,
     recent_appointments: formattedAppointments,
     recent_receptions: formattedReceptions,
+    clinical_notes: formattedClinicalNotes,
   };
 }

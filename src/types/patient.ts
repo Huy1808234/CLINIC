@@ -96,6 +96,21 @@ export interface PatientReceptionSummaryItem {
   created_by_name?: string | null;
 }
 
+export interface ClinicalNoteItem {
+  id: string;
+  patient_id: string;
+  clinic_id: string;
+  organization_id: string;
+  treatment_course_id: string | null;
+  reception_id: string | null;
+  author_staff_id: string;
+  author_name: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  course_no?: number | null;
+}
+
 export interface PatientHistorySummary {
   patient: Patient;
   insurance_cards: PatientInsuranceCard[];
@@ -127,6 +142,7 @@ export interface PatientHistorySummary {
     doctor_name: string | null;
   }[];
   recent_receptions?: PatientReceptionSummaryItem[];
+  clinical_notes?: ClinicalNoteItem[];
 }
 
 export type PatientTreatmentCourseSummaryItem = PatientHistorySummary["treatment_courses"][number];

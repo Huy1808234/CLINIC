@@ -54,6 +54,7 @@ import { runDoctorPatientChartReferenceUi2Tests } from "./unit/doctor-patient-ch
 import { runDoctorPatientChartAlignmentFix1Tests } from "./unit/doctor-patient-chart-alignment-fix1.test";
 import { runDoctorPatientChartLayoutParityFix2Tests } from "./unit/doctor-patient-chart-layout-parity-fix2.test";
 import { runAppshellHeaderIdentityRedesign1Tests } from "./unit/appshell-header-identity-redesign1.test";
+import { runDoctorClinicalNotes1Tests } from "./unit/doctor-clinical-notes1.test";
 
 async function main() {
   try {
@@ -113,6 +114,7 @@ async function main() {
     runDoctorPatientChartAlignmentFix1Tests();
     runDoctorPatientChartLayoutParityFix2Tests();
     runAppshellHeaderIdentityRedesign1Tests();
+    runDoctorClinicalNotes1Tests();
     console.log("All unit test suites executed successfully.");
   } catch (err) {
     console.error("Test failure:", err);

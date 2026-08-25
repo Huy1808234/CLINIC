@@ -8,20 +8,27 @@ import {
   UserOutlined,
   MedicineBoxOutlined,
   AppstoreOutlined,
+  FormOutlined,
 } from "@ant-design/icons";
 import type {
   PatientTreatmentCourseSummaryItem,
   CourseDiagnosisSummaryItem,
   CourseServiceOrderSummaryItem,
+  ClinicalNoteItem,
 } from "@/types/patient";
+import { DEFAULT_CLINIC_TIMEZONE } from "@/utils/timezone";
 
 export interface TreatmentHistoryAccordionProps {
   treatmentCourses: PatientTreatmentCourseSummaryItem[];
+  clinicalNotes?: ClinicalNoteItem[];
   activeCourseId?: string;
+  clinicTimezone?: string;
 }
 
 export const TreatmentHistoryAccordion: React.FC<TreatmentHistoryAccordionProps> = ({
   treatmentCourses,
+  clinicalNotes = [],
+  clinicTimezone = DEFAULT_CLINIC_TIMEZONE,
 }) => {
   if (!treatmentCourses || treatmentCourses.length === 0) {
     return (
@@ -39,6 +46,22 @@ export const TreatmentHistoryAccordion: React.FC<TreatmentHistoryAccordionProps>
 
   // Sort newest first by course_no descending
   const sortedCourses = [...treatmentCourses].sort((a, b) => b.course_no - a.course_no);
+
+  const formatNoteDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      return new Intl.DateTimeFormat("vi-VN", {
+        timeZone: clinicTimezone || DEFAULT_CLINIC_TIMEZONE,
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(date);
+    } catch {
+      return dateStr;
+    }
+  };
 
   const items = sortedCourses.map((course) => {
     const primaryDiag = course.course_diagnoses?.find(
@@ -58,6 +81,8 @@ export const TreatmentHistoryAccordion: React.FC<TreatmentHistoryAccordionProps>
 
     const completedSessions = course.completed_session_count || 0;
     const plannedSessions = course.planned_session_count || 0;
+
+    const courseNotes = clinicalNotes.filter((n) => n.treatment_course_id === course.id);
 
     const header = (
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 w-full pr-2 py-0.5">
@@ -185,6 +210,39 @@ export const TreatmentHistoryAccordion: React.FC<TreatmentHistoryAccordionProps>
               </div>
             </div>
           ) : null}
+
+          {/* Ghi chú lâm sàng gắn với Liệu trình */}
+          {courseNotes.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <span className="text-slate-400 font-semibold block text-[11px] flex items-center gap-1">
+                <FormOutlined className="text-slate-400 text-xs" />
+                <span>Ghi chú lâm sàng ({courseNotes.length})</span>
+              </span>
+
+              <div className="space-y-1.5">
+                {courseNotes.map((note) => (
+                  <div
+                    key={note.id}
+                    className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-xs space-y-1"
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span className="font-semibold text-slate-700">
+                        {note.author_name.startsWith("BS")
+                          ? note.author_name
+                          : `BS ${note.author_name}`}
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">
+                        {formatNoteDate(note.created_at)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-700 m-0 leading-relaxed whitespace-pre-wrap">
+                      {note.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ),
     };

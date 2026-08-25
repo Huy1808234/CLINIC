@@ -31,6 +31,7 @@ export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
     treatment_courses,
     recent_appointments,
     recent_receptions,
+    clinical_notes = [],
   } = history;
 
   const currentInsurance = insurance_cards.find((i) => i.is_current) || insurance_cards[0];
@@ -76,6 +77,7 @@ export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
           <CurrentCourseSummaryCard currentCourse={currentCourse} />
           <TreatmentHistoryAccordion
             treatmentCourses={treatment_courses}
+            clinicalNotes={clinical_notes}
             activeCourseId={currentCourse?.id}
           />
         </div>
@@ -93,9 +95,20 @@ export const PatientChartClientView: React.FC<PatientChartClientViewProps> = ({
           />
         </div>
 
-        {/* ROW 3 RIGHT (~35%): Ghi chú */}
+        {/* ROW 3 RIGHT (~35%): Ghi chú lâm sàng */}
         <div className="flex flex-col h-full">
-          <PatientNotesCard notes={latestReception?.notes} />
+          <PatientNotesCard
+            notes={latestReception?.notes}
+            clinicalNotes={clinical_notes}
+            isDoctor={isDoctor}
+            patientId={patient.id}
+            patientName={patient.full_name}
+            patientCode={patient.patient_code}
+            treatmentCourseId={currentCourse?.id}
+            treatmentCourseNo={currentCourse?.course_no}
+            receptionId={latestReception?.id}
+            doctorName={currentCourse?.doctor_name || undefined}
+          />
         </div>
       </div>
 

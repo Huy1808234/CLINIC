@@ -1408,6 +1408,88 @@ export interface Database {
           }
         ];
       };
+      clinical_notes: {
+        Row: {
+          id: string;
+          organization_id: string;
+          clinic_id: string;
+          patient_id: string;
+          treatment_course_id: string | null;
+          reception_id: string | null;
+          author_staff_id: string;
+          content: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          clinic_id: string;
+          patient_id: string;
+          treatment_course_id?: string | null;
+          reception_id?: string | null;
+          author_staff_id: string;
+          content: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          clinic_id?: string;
+          patient_id?: string;
+          treatment_course_id?: string | null;
+          reception_id?: string | null;
+          author_staff_id?: string;
+          content?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinical_notes_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinical_notes_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinical_notes_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinical_notes_treatment_course_id_fkey";
+            columns: ["treatment_course_id"];
+            isOneToOne: false;
+            referencedRelation: "treatment_courses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinical_notes_reception_id_fkey";
+            columns: ["reception_id"];
+            isOneToOne: false;
+            referencedRelation: "receptions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinical_notes_author_staff_id_fkey";
+            columns: ["author_staff_id"];
+            isOneToOne: false;
+            referencedRelation: "staff";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
